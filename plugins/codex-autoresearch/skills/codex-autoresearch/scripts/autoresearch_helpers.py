@@ -393,6 +393,59 @@ def build_continuation_policy(*, mode: str | None) -> dict[str, Any]:
     }
 
 
+def ensure_subagent_pool_plan(
+    *,
+    goal: str,
+    scope: str | None,
+    mode: str,
+    existing: Any = None,
+) -> dict[str, Any]:
+    if isinstance(existing, dict) and existing.get("kind") == "autoresearch_subagent_pool":
+        return existing
+    return build_subagent_pool_plan(goal=goal, scope=scope, mode=mode)
+
+
+def build_subagent_guidance(
+    *,
+    state: dict[str, Any],
+    decision: str,
+    reason: str,
+    subagent_pool: dict[str, Any],
+) -> dict[str, Any]:
+    flags = state.get("flags") or {}
+    stats = state.get("stats") or {}
+    last_iteration = state.get("last_iteration") or {}
+    discard_streak = stats.get("consecutive_discards", 0)
+
+    if decision == "stop" and reason.startswith("state_"):
+        recommended_action = "close_pool"
+        guidance_reason = "The run is already terminal, so the standing pool should wind down."
+    elif decision in {"stop", "needs_human"} or flags.get("stop_requested") or flags.get("needs_human"):
+        recommended_action = "pause_pool"
+        guidance_reason = "Do not fan out new work until the stop or blocker condition is resolved."
+    elif discard_streak >= 2:
+        recommended_action = "refresh_non_orchestrator_roles"
+        guidance_reason = "Keep the orchestrator, but refresh or narrow the supporting roles after repeated discards."
+    else:
+        recommended_action = "reuse_pool"
+        guidance_reason = "Reuse the standing pool and re-anchor each role with the latest result before the next iteration."
+
+    return {
+        "recommended_action": recommended_action,
+        "reason": guidance_reason,
+        "pool_key": subagent_pool.get("pool_key"),
+        "resource_tier": subagent_pool.get("resource_tier"),
+        "recommended_active_role_ids": subagent_pool.get("recommended_active_role_ids", []),
+        "reanchor_checklist": subagent_pool.get("reanchor_checklist", []),
+        "reanchor_with": {
+            "goal": state.get("goal"),
+            "scope": state.get("scope"),
+            "metric": state.get("metric"),
+            "last_iteration": last_iteration,
+        },
+    }
+
+
 def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, Any]:
     verify = config.verify or infer_verify_command(repo)
     guard = config.guard if config.guard is not None else infer_guard_command(repo, verify)
@@ -506,10 +559,10 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
         "duration": config.duration,
         "duration_seconds": duration_seconds,
         "memory": memory,
-        "required_keep_labels": required_keep_labels,
-        "required_stop_labels": required_stop_labels,
         "subagent_pool": subagent_pool,
         "continuation_policy": continuation_policy,
+        "required_keep_labels": required_keep_labels,
+        "required_stop_labels": required_stop_labels,
         "stop_condition": stop_condition,
         "rollback_strategy": rollback_strategy,
         "missing_required": missing_required,
@@ -757,6 +810,16 @@ def build_supervisor_snapshot(
         decision = "stop"
         reason = f"state_{state['status']}"
 
+    subagent_pool = ensure_subagent_pool_plan(
+        goal=state.get("goal") or "current autoresearch goal",
+        scope=state.get("scope"),
+        mode=state.get("mode") or "foreground",
+        existing=state.get("subagent_pool"),
+    )
+    continuation_policy = state.get("continuation_policy")
+    if not isinstance(continuation_policy, dict):
+        continuation_policy = build_continuation_policy(mode=state.get("mode"))
+
     snapshot = {
         "decision": decision,
         "reason": reason,
@@ -771,6 +834,14 @@ def build_supervisor_snapshot(
         "artifact_paths": state["artifact_paths"],
         "flags": state["flags"],
         "label_requirements": state.get("label_requirements", {"keep": [], "stop": []}),
+        "subagent_pool": subagent_pool,
+        "continuation_policy": continuation_policy,
+        "subagent_guidance": build_subagent_guidance(
+            state=state,
+            decision=decision,
+            reason=reason,
+            subagent_pool=subagent_pool,
+        ),
     }
     return snapshot
 

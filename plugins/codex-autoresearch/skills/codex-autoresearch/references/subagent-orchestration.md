@@ -8,13 +8,13 @@ Use this reference when a run should be subagent-first.
 - Subagents form a standing pool for parallel context gathering, alternative synthesis, verification, and critique.
 - The main agent hands bounded questions to the pool, waits for findings, and folds those findings into the next iteration before changing code again.
 - Subagents surface evidence, objections, risks, and candidate next steps. They do not independently advance the run state.
-- Use `python3 scripts/autoresearch_subagent_plan.py` when you want a stable starting pool instead of improvising roles each round.
+- Approval belongs before launch. Once the run is launched, keep the same pool moving until the user stops the run, the configured stop condition is met, or a real `needs_human` blocker appears.
 
 ## Launch Decision
 
-- Decide whether the standing pool should be active during the setup phase, before the user says "go".
-- Default to a standing pool for multi-step or high-uncertainty work.
-- Fall back to serial orchestrator-only execution when the repo is tiny, the task is trivial, or the environment cannot support parallel context gathering cleanly.
+- Decide whether the standing pool should already be active during setup or only after launch.
+- Default to an active pool for multi-step, uncertain, or unattended work.
+- Fall back to orchestrator-only serial execution when the task is tiny or the environment cannot support clean parallel work.
 
 ## Pool Rules
 
@@ -23,7 +23,6 @@ Use this reference when a run should be subagent-first.
 - Prefer a small pool with distinct jobs over one-off ad hoc spawning.
 - Re-anchor the pool after every keep/discard decision with the latest goal, state, and results.
 - Feed findings back into the loop before the next code change.
-- Keep the pool bounded. The orchestrator plus up to five focused subagents is the default ceiling for this bundle.
 
 ## State Ownership
 
@@ -33,8 +32,8 @@ Use this reference when a run should be subagent-first.
 
 ## Fallback Rules
 
-- If a subagent times out, conflicts with another role, or stops adding value, replace or drop that role without stopping the whole run.
-- If the whole pool becomes unhelpful, continue serially under the orchestrator instead of re-running setup.
+- If one subagent times out, conflicts with another role, or stops adding value, replace or drop that role without stopping the whole run.
+- If the whole pool becomes unhelpful, continue serially under the orchestrator instead of rerunning setup.
 - Only surface `needs_human` when the orchestrator cannot continue safely after folding in the latest pool findings.
 
 ## Local Scope

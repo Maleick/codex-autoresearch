@@ -1,6 +1,6 @@
 {
   "name": "codex-autoresearch",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Codex skill bundle for subagent-first, repeatable improvement loops with pre-launch approval, persistent orchestration, specialization workflows, and background controls.",
   "author": {
     "name": "Maleick",

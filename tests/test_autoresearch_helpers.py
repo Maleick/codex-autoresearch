@@ -56,6 +56,9 @@ def test_initialize_run_creates_state_and_results(tmp_path):
     assert state["goal"] == "Reduce lint failures"
     assert state["metric"]["baseline"] == "12"
     assert state["stats"]["total_iterations"] == 0
+    assert state["subagent_pool"]["standing_pool"] is True
+    assert state["subagent_pool"]["state_owner"] == "orchestrator"
+    assert state["continuation_policy"]["post_launch_default"] == "continue"
 
 
 def test_record_iteration_updates_state_and_results(tmp_path):
@@ -131,6 +134,8 @@ def test_supervisor_status_stops_when_requested(tmp_path):
 
     assert snapshot["decision"] == "stop"
     assert snapshot["reason"] == "stop_requested"
+    assert snapshot["subagent_guidance"]["recommended_action"] == "pause_pool"
+    assert snapshot["continuation_policy"]["post_launch_default"] == "continue"
 
 
 def test_set_stop_requested_rejects_foreground_run(tmp_path):
@@ -269,8 +274,17 @@ def test_runtime_launch_dry_run_returns_preview_without_writing_files(tmp_path):
     ]
     assert payload["launch_manifest_preview"]["subagent_pool"]["state_owner"] == "orchestrator"
     assert payload["state_preview"]["duration_seconds"] == 18000
+    assert payload["state_preview"]["subagent_pool"]["standing_pool"] is True
+    assert payload["state_preview"]["continuation_policy"]["post_launch_default"] == "continue"
     assert payload["state_preview"]["label_requirements"]["keep"] == ["verified"]
+    assert payload["state_preview"]["iterations_cap"] == 50
+    assert payload["launch_manifest_preview"]["iterations_cap"] == 50
+    assert payload["launch_manifest_preview"]["duration_seconds"] == 18000
+    assert payload["launch_manifest_preview"]["subagent_pool"]["activation"]["during_resume"] is True
+    assert payload["launch_manifest_preview"]["continuation_policy"]["approval_boundary"] == "pre_launch"
+    assert payload["launch_manifest_preview"]["required_keep_labels"] == ["verified"]
     assert payload["launch_manifest_preview"]["required_stop_labels"] == ["ship-ready"]
+    assert payload["launch_manifest_preview"]["run_tag"] == "nightly-build"
     assert not resolve_path(repo, None, "autoresearch-state.json").exists()
     assert not resolve_path(repo, None, "autoresearch-launch.json").exists()
 
@@ -355,6 +369,8 @@ def test_wizard_infers_verify_guard_and_missing_fields(tmp_path):
     assert payload["verify"] == "pytest"
     assert payload["guard"] == "python scripts/autoresearch_supervisor_status.py"
     assert payload["direction"] == "lower"
+    assert payload["subagent_pool"]["standing_pool"] is True
+    assert payload["continuation_policy"]["post_launch_default"] == "continue"
     assert payload["missing_required"] == ["mode", "scope"]
     assert payload["scope"] == tmp_path.name
     assert any(question["id"] == "mode" for question in payload["questions"])
@@ -380,8 +396,47 @@ def test_wizard_includes_duration_details_for_background_runs(tmp_path):
     assert payload["duration_seconds"] == 18000
     assert payload["required_keep_labels"] == ["verified"]
     assert payload["required_stop_labels"] == ["ship-ready"]
+    assert payload["subagent_pool"]["resource_tier"] == "full"
+    assert payload["subagent_pool"]["activation"]["during_setup"] is True
     assert "50 iterations complete" in payload["stop_condition"]
     assert "5h elapses" in payload["stop_condition"]
+    assert "ship-ready" in payload["stop_condition"]
+
+
+def test_wizard_exposes_pool_plan_fields_for_setup_preview(tmp_path):
+    repo = str(tmp_path)
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "autoresearch_supervisor_status.py").write_text("", encoding="utf-8")
+
+    payload = build_setup_summary(
+        repo=repo,
+        config=WizardConfig(
+            goal="Run a subagent-first plan",
+            mode="background",
+            verify="pytest",
+            iterations=12,
+            duration="2h",
+            required_keep_labels=["verified"],
+            required_stop_labels=["ship-ready"],
+            rollback_strategy="revert the current experiment and rerun",
+        ),
+    )
+
+    assert payload["scope"] == tmp_path.name
+    assert payload["iterations_cap"] == 12
+    assert payload["duration"] == "2h"
+    assert payload["duration_seconds"] == 7200
+    assert payload["required_keep_labels"] == ["verified"]
+    assert payload["required_stop_labels"] == ["ship-ready"]
+    assert payload["rollback_strategy"] == "revert the current experiment and rerun"
+    assert payload["memory"]["loaded"] is False
+    assert payload["memory"]["excerpt"] is None
+    assert payload["subagent_pool"]["standing_pool"] is True
+    assert payload["continuation_policy"]["approval_boundary"] == "pre_launch"
+    assert payload["missing_required"] == ["scope"]
+    assert {question["id"] for question in payload["questions"]} == {"metric", "guard", "scope"}
+    assert "12 iterations complete" in payload["stop_condition"]
+    assert "2h elapses" in payload["stop_condition"]
     assert "ship-ready" in payload["stop_condition"]
 
 
@@ -1070,6 +1125,94 @@ def test_supervisor_status_stops_when_duration_elapsed(tmp_path):
 
     assert snapshot["decision"] == "stop"
     assert snapshot["reason"] == "duration_elapsed"
+
+
+def test_supervisor_snapshot_refreshes_pool_after_repeated_discards(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Reduce flaky tests",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest tests/integration",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="discard",
+        metric_value="8",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="first try",
+        change_summary="discarded first attempt",
+        labels=["retry"],
+        note=None,
+        iteration=None,
+    )
+    append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="discard",
+        metric_value="8",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="second try",
+        change_summary="discarded second attempt",
+        labels=["retry"],
+        note=None,
+        iteration=None,
+    )
+
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["decision"] == "relaunch"
+    assert snapshot["subagent_guidance"]["recommended_action"] == "refresh_non_orchestrator_roles"
+    assert snapshot["subagent_guidance"]["reanchor_with"]["last_iteration"]["decision"] == "discard"
+
+
+def test_supervisor_snapshot_backfills_pool_for_older_state_files(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Reduce flaky tests",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest tests/integration",
+        mode="foreground",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("subagent_pool", None)
+    payload.pop("continuation_policy", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["subagent_pool"]["kind"] == "autoresearch_subagent_pool"
+    assert snapshot["continuation_policy"]["approval_boundary"] == "pre_launch"
 
 
 @pytest.mark.parametrize(
