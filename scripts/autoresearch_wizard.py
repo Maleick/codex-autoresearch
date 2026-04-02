@@ -21,6 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--guard", help="Optional guard command. Use an empty string to force no guard.")
     parser.add_argument("--mode", choices=["foreground", "background"], help="Run mode.")
     parser.add_argument("--iterations", type=int, help="Optional iteration cap.")
+    parser.add_argument("--duration", help="Optional wall-clock cap, for example 5h or 300m.")
+    parser.add_argument("--memory-path", help="Optional reusable memory input path. Defaults to autoresearch-memory.md at repo root.")
+    parser.add_argument("--required-keep-labels", nargs="*", help="Labels that must be present before a keep decision is valid.")
+    parser.add_argument("--required-stop-labels", nargs="*", help="Labels that mark a retained keep as stop-ready.")
     parser.add_argument("--stop-condition", help="Optional textual stop condition.")
     parser.add_argument("--rollback-strategy", help="Optional rollback strategy description.")
     return parser
@@ -38,6 +42,10 @@ def main() -> int:
         guard=args.guard,
         mode=args.mode,
         iterations=args.iterations,
+        duration=args.duration,
+        memory_path=args.memory_path,
+        required_keep_labels=args.required_keep_labels,
+        required_stop_labels=args.required_stop_labels,
         stop_condition=args.stop_condition,
         rollback_strategy=args.rollback_strategy,
     )

@@ -7,6 +7,8 @@ This repository is an original implementation inspired by the workflow shape of 
 
 It now also includes a guided planning wizard and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
 
+Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearch`, this repo now supports explicit wall-clock caps for unattended runs, so an overnight plan can be bounded by both iterations and elapsed time.
+
 ## What This Repo Contains
 
 - `SKILL.md`: the skill entrypoint Codex reads when the bundle is activated
@@ -58,6 +60,13 @@ By default the scripts manage these repo-root files:
 
 These are intentionally uncommitted working artifacts. The helper scripts can also archive a previous run to `*.prev.*` when you request a fresh start.
 
+For unattended runs, the bundle can also produce:
+
+- `autoresearch-report.md`
+- `autoresearch-self-improvement.md`
+- `autoresearch-memory.md`
+- `autoresearch-hook-context.json`
+
 ## Quick Start
 
 Install the skill in a repo-managed location, then activate it in Codex and describe the outcome you want. For example:
@@ -78,14 +87,39 @@ Codex should:
 You can also drive the helpers directly:
 
 ```text
-python scripts/autoresearch_wizard.py --goal "Reduce flaky tests"
+python scripts/autoresearch_wizard.py --goal "Reduce flaky tests overnight" --mode background --iterations 50 --duration 5h
+python scripts/autoresearch_wizard.py --goal "Reduce flaky tests overnight" --mode background --iterations 50 --duration 5h --required-keep-labels verified --required-stop-labels ship-ready
 python scripts/autoresearch_init_run.py --goal "Reduce flaky tests" --metric "failing tests" --direction lower --verify "pytest tests/integration" --mode foreground --fresh-start
+python scripts/autoresearch_init_run.py --goal "Continue last autoresearch loop" --metric "failing tests" --direction lower --verify "pytest tests/integration" --mode foreground --memory-path autoresearch-memory.md --fresh-start
 python scripts/autoresearch_record_iteration.py --decision keep --metric-value 7 --change-summary "stabilize API timeout handling"
+python scripts/autoresearch_runtime_ctl.py launch --goal "Reduce flaky tests overnight" --metric "failing tests" --direction lower --verify "pytest tests/integration" --iterations 50 --duration 5h --required-keep-labels verified --required-stop-labels ship-ready --dry-run
+python scripts/autoresearch_runtime_ctl.py launch --goal "Continue last autoresearch loop overnight" --metric "failing tests" --direction lower --verify "pytest tests/integration" --iterations 50 --duration 5h --memory-path autoresearch-memory.md --dry-run
+python scripts/autoresearch_runtime_ctl.py launch --goal "Reduce flaky tests overnight" --metric "failing tests" --direction lower --verify "pytest tests/integration" --iterations 50 --duration 5h --fresh-start
+python scripts/autoresearch_runtime_ctl.py status --report-path autoresearch-report.md
 python scripts/autoresearch_supervisor_status.py
+python scripts/autoresearch_complete_run.py
 python scripts/autoresearch_runtime_ctl.py complete
 python scripts/autoresearch_runtime_ctl.py resume
 python scripts/autoresearch_runtime_ctl.py stop
 ```
+
+For overnight runs, set both `--iterations` and `--duration`. For example, `--iterations 50 --duration 5h` lets the run stop on either the iteration cap or the time budget.
+If you want hard retention/stop gates, pair that with `--required-keep-labels` and `--required-stop-labels`.
+Every completed run now also writes `autoresearch-self-improvement.md` and `autoresearch-memory.md`. The next wizard, init, and background launch flow automatically load `autoresearch-memory.md` when it exists, unless you deliberately override it with `--memory-path`.
+For copy/symlink installation details and the release-validation commands, see [docs/INSTALL.md](docs/INSTALL.md).
+Use `scripts/autoresearch_complete_run.py` for foreground runs. `scripts/autoresearch_runtime_ctl.py complete` remains the background-run completion path.
+
+## Session Hooks
+
+For resumed or overnight work, you can install user-level Codex hooks that remind a future session about an active run and block premature stop when the supervisor still wants to relaunch:
+
+```text
+python scripts/autoresearch_hooks_ctl.py install
+python scripts/autoresearch_hooks_ctl.py status
+python scripts/autoresearch_hooks_ctl.py uninstall
+```
+
+The hook installer writes under `$CODEX_HOME` and keeps a manifest so it can remove only the managed hook entries later.
 
 ## Plugin Packaging
 
@@ -104,9 +138,11 @@ To run the plugin-distribution workflow locally:
 4. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing changes.
 5. Update `CHANGELOG.md` with release notes before tagging a user-facing release.
 6. Keep `marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
-7. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
+7. Run `python scripts/check_plugin_distribution.py` and `python -m pytest tests/test_plugin_distribution.py` before release.
+8. Add release-ready assets under `plugins/codex-autoresearch/assets` only when you also wire those files into `plugin.json`.
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
+Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 For a fresh plugin creation, use the scaffold script:
 

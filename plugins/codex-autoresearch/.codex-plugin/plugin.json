@@ -38,13 +38,6 @@
       "Use the debug workflow to isolate recurring failures before writing code changes.",
       "Use ship workflow to stabilize this repo for release."
     ],
-    "brandColor": "#0F766E",
-    "composerIcon": "./assets/icon.png",
-    "logo": "./assets/logo.png",
-    "screenshots": [
-      "./assets/overview.png",
-      "./assets/workflow.png",
-      "./assets/results.png"
-    ]
+    "brandColor": "#0F766E"
   }
 }
