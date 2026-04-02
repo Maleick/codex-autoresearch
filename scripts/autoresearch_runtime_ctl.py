@@ -11,6 +11,7 @@ try:
         initialize_run,
         mark_background_active,
         print_json,
+        resume_background_run,
         resolve_path,
         set_stop_requested,
         write_launch_manifest,
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
         initialize_run,
         mark_background_active,
         print_json,
+        resume_background_run,
         resolve_path,
         set_stop_requested,
         write_launch_manifest,
@@ -58,6 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
     stop = subparsers.add_parser("stop", help="Request that the background run stop.")
     stop.add_argument("--repo", help="Repository root. Defaults to the current working directory.")
     stop.add_argument("--state-path", help="Override the state JSON path.")
+
+    resume = subparsers.add_parser("resume", help="Resume a previously launched background run.")
+    resume.add_argument("--repo", help="Repository root. Defaults to the current working directory.")
+    resume.add_argument("--state-path", help="Override the state JSON path.")
 
     return parser
 
@@ -115,6 +121,15 @@ def command_stop(args: argparse.Namespace) -> dict:
     }
 
 
+def command_resume(args: argparse.Namespace) -> dict:
+    state = resume_background_run(repo=args.repo, state_path_value=args.state_path)
+    return {
+        "status": "resumed",
+        "run_id": state["run_id"],
+        "state": state,
+    }
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -125,6 +140,8 @@ def main() -> int:
             payload = command_status(args)
         elif args.command == "stop":
             payload = command_stop(args)
+        elif args.command == "resume":
+            payload = command_resume(args)
         else:
             parser.error(f"Unsupported command: {args.command}")
             return 2

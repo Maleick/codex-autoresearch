@@ -1,15 +1,46 @@
 [
   {
-    "id": "bootstrap_autoresearch_bundle",
-    "name": "Bootstrap an original Codex autoresearch bundle",
+    "id": "core_artifact_helpers",
+    "name": "Artifact helpers for initialize, record, and supervisor status",
     "status": "complete",
     "acceptance_tests": [
       "Helper scripts can initialize state and results artifacts in a temporary repo",
       "Recording an iteration updates the TSV log and state counters correctly",
-      "Supervisor status returns deterministic stop or relaunch decisions",
-      "Bundle is installed globally or in the target repo skill path and can be invoked as $codex-autoresearch",
-      "Repository is published to a new public GitHub repo"
+      "Supervisor status returns deterministic stop or relaunch decisions"
     ],
-    "notes": "Original bundle implemented and verified. Fixed PowerShell bridge error 8009001d by injecting environment variables into .codex/config.toml. Installed pytest and verified helper scripts. Skill installed to .codex/skills/autoresearch and verified with $codex-autoresearch invocation. Repository published to https://github.com/Maleick/codex-autoresearch."
+    "notes": "The Python helper layer manages state, TSV logging, and deterministic supervisor decisions."
+  },
+  {
+    "id": "interactive_setup_wizard",
+    "name": "Interactive setup wizard with repo-aware defaults",
+    "status": "complete",
+    "acceptance_tests": [
+      "Wizard infers a pytest-based verify command when the repo exposes tests",
+      "Wizard offers a default guard when autoresearch supervisor tooling exists",
+      "Wizard reports missing required fields before launch"
+    ],
+    "notes": "Added scripts/autoresearch_wizard.py plus shared helper logic for setup summaries, missing fields, and clarification questions."
+  },
+  {
+    "id": "background_control_parity",
+    "name": "Background launch, stop, status, and resume control",
+    "status": "complete",
+    "acceptance_tests": [
+      "Background launch writes a launch manifest",
+      "Stop requests are persisted in state",
+      "Resume clears stop_requested and marks the run active again"
+    ],
+    "notes": "The runtime controller now matches the skill contract by supporting resume as well as launch, status, and stop."
+  },
+  {
+    "id": "workflow_pack",
+    "name": "Specialized workflow references for plan, debug, fix, learn, predict, scenario, security, and ship",
+    "status": "complete",
+    "acceptance_tests": [
+      "Skill entrypoint references the workflow documents consistently",
+      "README documents the expanded workflow surface",
+      "Launcher metadata advertises the expanded routing behavior"
+    ],
+    "notes": "Adapted the narrower Codex bundle to support a Claude-autoresearch-style workflow pack without adopting the plugin architecture."
   }
 ]

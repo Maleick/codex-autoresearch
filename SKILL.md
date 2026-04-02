@@ -15,9 +15,18 @@ When the skill is invoked:
 
 1. Read `references/core-principles.md`.
 2. Read `references/structured-output-spec.md`.
-3. For a new interactive run, also read `references/interaction-wizard.md` and `references/loop-workflow.md`.
-4. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
-5. Prefer the bundled helpers over manual edits to run artifacts.
+3. For a new interactive run, also read `references/interaction-wizard.md`, `references/plan-workflow.md`, and `references/loop-workflow.md`.
+4. For state and results semantics, also read `references/state-management.md` and `references/results-logging.md`.
+5. If the user asks for a specialized mode, also read the matching workflow reference:
+   - `references/debug-workflow.md`
+   - `references/fix-workflow.md`
+   - `references/learn-workflow.md`
+   - `references/predict-workflow.md`
+   - `references/scenario-workflow.md`
+   - `references/security-workflow.md`
+   - `references/ship-workflow.md`
+6. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
+7. Prefer the bundled helpers over manual edits to run artifacts.
 
 ## Required Internal Fields
 
@@ -50,6 +59,14 @@ Strongly recommended:
 9. Treat run artifacts as generated working state, not source files to commit.
 10. If the run gets stuck, change strategy instead of brute-forcing the same idea.
 
+## Mode Routing
+
+Use the default loop for metric-driven optimization.
+
+Use specialized workflows when the user asks to plan, debug, fix, learn, predict, expand scenarios, run a security pass, or prepare to ship.
+
+For planning, prefer `python scripts/autoresearch_wizard.py` to generate the initial setup summary before asking the user the remaining questions.
+
 ## Background Control
 
 Use these helpers when managing a detached run:
@@ -57,6 +74,7 @@ Use these helpers when managing a detached run:
 - `python scripts/autoresearch_runtime_ctl.py launch ...`
 - `python scripts/autoresearch_runtime_ctl.py status`
 - `python scripts/autoresearch_runtime_ctl.py stop`
+- `python scripts/autoresearch_runtime_ctl.py resume`
 
 Use `python scripts/autoresearch_supervisor_status.py` when a supervisor needs a deterministic relaunch decision.
 

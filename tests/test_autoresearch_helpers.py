@@ -4,10 +4,13 @@ import json
 
 from scripts.autoresearch_helpers import (
     RunConfig,
+    WizardConfig,
     append_iteration,
+    build_setup_summary,
     build_supervisor_snapshot,
     initialize_run,
     read_results_rows,
+    resume_background_run,
     resolve_path,
     write_launch_manifest,
 )
@@ -141,3 +144,51 @@ def test_runtime_launch_manifest_points_at_artifacts(tmp_path):
     assert manifest["mode"] == "background"
     assert manifest["run_tag"] == "nightly-build"
     assert manifest["artifact_paths"]["launch"].endswith("autoresearch-launch.json")
+
+
+def test_wizard_infers_verify_guard_and_missing_fields(tmp_path):
+    repo = str(tmp_path)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "autoresearch_supervisor_status.py").write_text("", encoding="utf-8")
+
+    payload = build_setup_summary(
+        repo=repo,
+        config=WizardConfig(goal="Make tests reliable"),
+    )
+
+    assert payload["verify"] == "pytest"
+    assert payload["guard"] == "python scripts/autoresearch_supervisor_status.py"
+    assert payload["direction"] == "lower"
+    assert payload["missing_required"] == ["mode"]
+    assert any(question["id"] == "mode" for question in payload["questions"])
+
+
+def test_resume_background_run_clears_stop_requested(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Lower build time",
+        metric="build seconds",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["flags"]["stop_requested"] = True
+    payload["flags"]["background_active"] = False
+    payload["status"] = "stopping"
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    resumed = resume_background_run(repo=repo, state_path_value=None)
+
+    assert resumed["flags"]["stop_requested"] is False
+    assert resumed["flags"]["background_active"] is True
+    assert resumed["status"] == "running"

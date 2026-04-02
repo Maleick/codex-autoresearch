@@ -1,8 +1,8 @@
 interface:
   display_name: "Codex Autoresearch"
-  short_description: "Autonomous metric-driven iteration with foreground and background control"
+  short_description: "Autonomous iteration with a setup wizard, specialized workflows, and foreground/background control"
   brand_color: "#0F766E"
-  default_prompt: "Use $codex-autoresearch to infer a concrete goal, scope, metric, verify command, and optional guard from the repository. Ask one grounded clarification round, require a foreground or background choice, baseline once, and record each completed experiment before moving to the next."
+  default_prompt: "Use $codex-autoresearch to route between plan, debug, fix, learn, predict, scenario, security, ship, or the default optimization loop. Start with the setup wizard when configuration is incomplete, ask one grounded clarification round, require a foreground or background choice, baseline once, and record each completed experiment before moving to the next."
 
 policy:
   allow_implicit_invocation: true

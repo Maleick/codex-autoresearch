@@ -3,9 +3,10 @@
 ## Phase 1: Setup
 
 1. Read the relevant code and repo configuration.
-2. Summarize the goal, scope, metric, direction, verify command, and guard.
-3. Ask one grounded clarification round if needed.
-4. Initialize artifacts with `scripts/autoresearch_init_run.py`.
+2. Generate the initial setup summary with `scripts/autoresearch_wizard.py` when the request is incomplete.
+3. Summarize the goal, scope, metric, direction, verify command, and guard.
+4. Ask one grounded clarification round if needed.
+5. Initialize artifacts with `scripts/autoresearch_init_run.py`.
 
 ## Phase 2: Iterate
 

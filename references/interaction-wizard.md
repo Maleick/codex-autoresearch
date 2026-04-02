@@ -7,10 +7,13 @@ Use this contract for every new interactive run.
 Confirm or infer:
 
 1. What outcome matters most?
-2. How should progress be measured?
-3. What command verifies the target metric?
-4. Is there a guard command that must continue to pass?
-5. Should the run stay in `foreground` or move to `background`?
+2. What scope is actually in play?
+3. How should progress be measured?
+4. What command verifies the target metric?
+5. Is there a guard command that must continue to pass?
+6. Should the run stay in `foreground` or move to `background`?
+
+Use `python scripts/autoresearch_wizard.py` to build the first setup summary, then only ask about fields that are still missing or risky.
 
 ## Launch Rule
 

@@ -47,6 +47,20 @@ class RunConfig:
     baseline: str | None = None
 
 
+@dataclass
+class WizardConfig:
+    goal: str | None = None
+    scope: str | None = None
+    metric: str | None = None
+    direction: str | None = None
+    verify: str | None = None
+    guard: str | None = None
+    mode: str | None = None
+    iterations: int | None = None
+    stop_condition: str | None = None
+    rollback_strategy: str | None = None
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -137,6 +151,113 @@ def append_results_row(path: Path, row: dict[str, Any]) -> None:
         writer = csv.DictWriter(handle, delimiter="\t", fieldnames=RESULTS_HEADER, lineterminator="\n")
         normalized = {field: row.get(field, "") for field in RESULTS_HEADER}
         writer.writerow(normalized)
+
+
+def infer_verify_command(repo: str | None) -> str:
+    root = resolve_repo(repo)
+    if (root / "pytest.ini").exists() or (root / "tests").exists():
+        return "pytest"
+    if (root / "package.json").exists():
+        return "npm test"
+    return "<set verify command>"
+
+
+def infer_guard_command(repo: str | None, verify: str | None) -> str | None:
+    root = resolve_repo(repo)
+    if (root / "scripts" / "autoresearch_supervisor_status.py").exists() and verify != "python scripts/autoresearch_supervisor_status.py":
+        return "python scripts/autoresearch_supervisor_status.py"
+    return None
+
+
+def normalize_mode(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized not in {"foreground", "background"}:
+        raise AutoresearchError(f"Unsupported mode: {value}")
+    return normalized
+
+
+def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, Any]:
+    verify = config.verify or infer_verify_command(repo)
+    guard = config.guard if config.guard is not None else infer_guard_command(repo, verify)
+    direction = config.direction or "lower"
+    mode = normalize_mode(config.mode)
+    stop_condition = config.stop_condition or (
+        f"stop when `{verify}` reaches the target metric"
+        if verify and verify != "<set verify command>"
+        else "stop when the target metric is met"
+    )
+    rollback_strategy = config.rollback_strategy or "discard the current experiment and keep the last verified state"
+    metric = config.metric or "primary verify metric"
+    scope = config.scope or "current repository"
+
+    missing_required: list[str] = []
+    if not config.goal:
+        missing_required.append("goal")
+    if not config.mode:
+        missing_required.append("mode")
+    if verify == "<set verify command>":
+        missing_required.append("verify")
+
+    questions: list[dict[str, str]] = []
+    if not config.goal:
+        questions.append(
+            {
+                "id": "goal",
+                "prompt": "What outcome should this run optimize for?",
+                "reason": "The loop needs one concrete result to chase.",
+            }
+        )
+    if not config.metric:
+        questions.append(
+            {
+                "id": "metric",
+                "prompt": f"What metric should track progress? Default: `{metric}`",
+                "reason": "The loop keeps or discards experiments based on a measurable result.",
+            }
+        )
+    if verify == "<set verify command>":
+        questions.append(
+            {
+                "id": "verify",
+                "prompt": "What command should mechanically verify the metric?",
+                "reason": "The loop should not keep changes on intuition alone.",
+            }
+        )
+    if config.guard is None and guard:
+        questions.append(
+            {
+                "id": "guard",
+                "prompt": f"Should this run keep `{guard}` as a guard command, replace it, or use none?",
+                "reason": "A guard catches regressions that the primary metric can miss.",
+            }
+        )
+    elif config.guard == "":
+        guard = None
+    if not config.mode:
+        questions.append(
+            {
+                "id": "mode",
+                "prompt": "Should the run stay in `foreground` or move to `background`?",
+                "reason": "The skill requires an explicit run-mode choice before launch.",
+            }
+        )
+
+    return {
+        "goal": config.goal,
+        "scope": scope,
+        "metric": metric,
+        "direction": direction,
+        "verify": verify,
+        "guard": guard,
+        "mode": mode,
+        "iterations_cap": config.iterations,
+        "stop_condition": stop_condition,
+        "rollback_strategy": rollback_strategy,
+        "missing_required": missing_required,
+        "questions": questions,
+    }
 
 
 def metric_is_better(candidate: Decimal, current: Decimal | None, direction: str) -> bool:
@@ -400,6 +521,25 @@ def mark_background_active(
     state["updated_at"] = utc_now()
     state["flags"]["background_active"] = active
     state["status"] = "running" if active else state["status"]
+    atomic_write_json(state_path, state)
+    return state
+
+
+def resume_background_run(
+    *,
+    repo: str | None,
+    state_path_value: str | None,
+) -> dict[str, Any]:
+    state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
+    state = read_json_file(state_path)
+    if state["mode"] != "background":
+        raise AutoresearchError("Only background runs can be resumed.")
+
+    state["updated_at"] = utc_now()
+    state["flags"]["stop_requested"] = False
+    state["flags"]["background_active"] = True
+    if state["status"] in {"stopping", "stopped", "initialized"}:
+        state["status"] = "running"
     atomic_write_json(state_path, state)
     return state
 
