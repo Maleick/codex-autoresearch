@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+autoresearch-state.json
+autoresearch-state.prev.json
+autoresearch-launch.json
+autoresearch-launch.prev.json
+research-results.tsv
+research-results.prev.tsv
