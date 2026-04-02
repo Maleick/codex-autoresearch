@@ -2,7 +2,7 @@
   {
     "id": "bootstrap_autoresearch_bundle",
     "name": "Bootstrap an original Codex autoresearch bundle",
-    "status": "in_progress",
+    "status": "complete",
     "acceptance_tests": [
       "Helper scripts can initialize state and results artifacts in a temporary repo",
       "Recording an iteration updates the TSV log and state counters correctly",
@@ -10,6 +10,6 @@
       "Bundle is installed globally or in the target repo skill path and can be invoked as $codex-autoresearch",
       "Repository is published to a new public GitHub repo"
     ],
-    "notes": "Initial build based on the public reference repo architecture, but implemented as a smaller original bundle. Remaining work: verify with pytest after reboot, install for Codex app use, and publish to a public GitHub repository. Current blocker: shell bridge failed in-session with a managed Windows PowerShell loader error 8009001d, so git and test commands could not be executed."
+    "notes": "Original bundle implemented and verified. Fixed PowerShell bridge error 8009001d by injecting environment variables into .codex/config.toml. Installed pytest and verified helper scripts. Skill installed to .codex/skills/autoresearch and verified with $codex-autoresearch invocation. Repository published to https://github.com/Maleick/codex-autoresearch."
   }
 ]
