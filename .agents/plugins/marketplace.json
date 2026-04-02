@@ -1,0 +1,22 @@
+{
+  "name": "codex-autoresearch",
+  "interface": {
+    "displayName": "Autoresearch Plugins"
+  },
+  "plugins": [
+    {
+      "name": "codex-autoresearch",
+      "source": {
+        "source": "github",
+        "repo": "Maleick/codex-autoresearch",
+        "path": "plugins/codex-autoresearch",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

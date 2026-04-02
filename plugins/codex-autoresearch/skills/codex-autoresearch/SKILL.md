@@ -92,19 +92,3 @@ At minimum:
 ## Notes
 
 This skill bundle does not attempt to prescribe one exact Codex runtime environment. It gives Codex a stable protocol and file format so the interactive workflow and any external runner can share state cleanly.
-
-## Plugin Distribution
-
-This repository also contains a local plugin bundle at `plugins/codex-autoresearch`.
-When shipping the package, keep these in sync:
-
-- `SKILL.md` and `agents/openai.yaml` at the plugin skill path
-- `scripts/*.py` used by run orchestration
-- `references/*.md` that define workflow semantics
-- `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`
-
-If you update this repo skill directly, mirror any behavior changes into:
-
-`plugins/codex-autoresearch/skills/codex-autoresearch/`
-
-and re-run quick validation on that skill payload before release.

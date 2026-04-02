@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import pytest
 
 from scripts.autoresearch_helpers import (
     RunConfig,
+    WizardConfig,
     append_iteration,
+    build_setup_summary,
     build_supervisor_snapshot,
+    complete_background_run,
     initialize_run,
     read_results_rows,
+    resume_background_run,
     resolve_path,
     write_launch_manifest,
 )
@@ -141,3 +146,232 @@ def test_runtime_launch_manifest_points_at_artifacts(tmp_path):
     assert manifest["mode"] == "background"
     assert manifest["run_tag"] == "nightly-build"
     assert manifest["artifact_paths"]["launch"].endswith("autoresearch-launch.json")
+
+
+def test_wizard_infers_verify_guard_and_missing_fields(tmp_path):
+    repo = str(tmp_path)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "autoresearch_supervisor_status.py").write_text("", encoding="utf-8")
+
+    payload = build_setup_summary(
+        repo=repo,
+        config=WizardConfig(goal="Make tests reliable"),
+    )
+
+    assert payload["verify"] == "pytest"
+    assert payload["guard"] == "python scripts/autoresearch_supervisor_status.py"
+    assert payload["direction"] == "lower"
+    assert payload["missing_required"] == ["scope", "mode"]
+    assert payload["scope"] == tmp_path.name
+    assert any(question["id"] == "mode" for question in payload["questions"])
+    assert any(question["id"] == "scope" for question in payload["questions"])
+
+
+def test_wizard_rejects_invalid_direction(tmp_path):
+    repo = str(tmp_path)
+    with pytest.raises(RuntimeError):
+        build_setup_summary(
+            repo=repo,
+            config=WizardConfig(
+                goal="Reduce flake",
+                mode="foreground",
+                direction="sideways",
+            ),
+        )
+
+
+def test_initialize_run_rejects_invalid_iteration_cap(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Stabilize startup",
+        metric="startup_time",
+        direction="lower",
+        verify="pytest",
+        mode="foreground",
+        iterations=0,
+    )
+
+    with pytest.raises(RuntimeError):
+        initialize_run(
+            repo=repo,
+            results_path_value=None,
+            state_path_value=None,
+            config=config,
+            fresh_start=False,
+        )
+
+
+def test_append_iteration_rejects_reused_iteration_number(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Reduce flaky tests",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest tests/integration",
+        mode="foreground",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="keep",
+        metric_value="8",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="seed",
+        change_summary="initial seed",
+        labels=["seed"],
+        note=None,
+        iteration=None,
+    )
+
+    with pytest.raises(RuntimeError):
+        append_iteration(
+            repo=repo,
+            results_path_value=None,
+            state_path_value=None,
+            decision="keep",
+            metric_value="7",
+            verify_status="pass",
+            guard_status="skip",
+            hypothesis="seed",
+            change_summary="reused number",
+            labels=["seed"],
+            note=None,
+            iteration=1,
+        )
+
+
+def test_needs_human_iteration_resets_discard_streak(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Reduce flaky tests",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest tests/integration",
+        mode="foreground",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="discard",
+        metric_value="8",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="seed",
+        change_summary="discarded",
+        labels=["seed"],
+        note=None,
+        iteration=None,
+    )
+    state = append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="needs_human",
+        metric_value="6",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="seed",
+        change_summary="needs manual review",
+        labels=["review"],
+        note=None,
+        iteration=None,
+    )
+
+    assert state["stats"]["consecutive_discards"] == 0
+    assert state["flags"]["needs_human"] is True
+
+
+def test_resume_background_run_clears_stop_requested(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Lower build time",
+        metric="build seconds",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["flags"]["stop_requested"] = True
+    payload["flags"]["background_active"] = False
+    payload["status"] = "stopping"
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    resumed = resume_background_run(repo=repo, state_path_value=None)
+
+    assert resumed["flags"]["stop_requested"] is False
+    assert resumed["flags"]["background_active"] is True
+    assert resumed["status"] == "running"
+
+
+def test_resume_background_run_disallows_completed_runs(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Lower build time",
+        metric="build seconds",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["status"] = "completed"
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError):
+        resume_background_run(repo=repo, state_path_value=None)
+
+
+def test_complete_background_run_marks_state_complete(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Lower build time",
+        metric="build seconds",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state = complete_background_run(repo=repo, state_path_value=None)
+
+    assert state["status"] == "completed"
+    assert state["flags"]["background_active"] is False
+    assert state["flags"]["stop_requested"] is False
