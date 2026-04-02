@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4 - 2026-04-02
+
+- made the runtime operationally subagent-first with a standing-pool planner, persisted `subagent_pool` metadata, and a continuation policy shared across setup, state, launch, and status artifacts
+- expanded hook, helper, and contract coverage so resumed runs re-anchor the standing pool and continue by default after launch unless a stop condition or real blocker appears
+- aligned the packaged plugin payload, launcher metadata, and contributor documentation with the subagent-first orchestration model and release workflow
+
 ## v1.0.3 - 2026-04-02
 
 - added managed SessionStart/Stop hook support, repo-local hook context tracking, and mirrored plugin hook files for resumed or unattended autoresearch runs

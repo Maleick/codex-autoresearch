@@ -1,5 +1,5 @@
 # Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/Maleick/codex-autoresearch?style=flat-square&label=release)](https://github.com/Maleick/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/Maleick/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-> **v1.0.3** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Subagent-first, metric-driven iteration for Codex.
+> **v1.0.4** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Subagent-first, metric-driven iteration for Codex.
 
 Subagent-first, metric-driven iteration for Codex.
 
@@ -7,9 +7,7 @@ This repository is an original implementation inspired by the workflow shape of 
 
 It now also includes a plan helper, expressed here as a guided planning wizard, a standing subagent-pool contract, and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
 
-Autoresearch is subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available across iterations, delegates focused work, and folds the results back into the loop.
-
-Autoresearch is now subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available, delegates focused work, and merges the results back into the loop. The approval boundary stays in setup; after launch, the orchestrator keeps the loop moving until you stop it, the configured stop condition is met, or a real blocker requires human input.
+Autoresearch is subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available across iterations, delegates focused work, folds the results back into the loop, and keeps running after launch until you stop it, the configured stop condition is met, or a real blocker requires human input.
 
 Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearch`, this repo now supports explicit wall-clock caps for unattended runs, so an overnight plan can be bounded by both iterations and elapsed time.
 The current release also adds managed session hooks, a foreground completion helper, automatic memory carry-forward into the next run, and a dedicated plugin-distribution validator for the packaged Codex plugin.
