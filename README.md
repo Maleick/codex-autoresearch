@@ -81,8 +81,30 @@ python scripts/autoresearch_wizard.py --goal "Reduce flaky tests"
 python scripts/autoresearch_init_run.py --goal "Reduce flaky tests" --metric "failing tests" --direction lower --verify "pytest tests/integration" --mode foreground --fresh-start
 python scripts/autoresearch_record_iteration.py --decision keep --metric-value 7 --change-summary "stabilize API timeout handling"
 python scripts/autoresearch_supervisor_status.py
+python scripts/autoresearch_runtime_ctl.py complete
 python scripts/autoresearch_runtime_ctl.py resume
 python scripts/autoresearch_runtime_ctl.py stop
+```
+
+## Plugin Packaging
+
+This repository also includes a local plugin artifact at:
+
+- `plugins/codex-autoresearch`
+- `plugins/codex-autoresearch/.codex-plugin/plugin.json`
+- `plugins/codex-autoresearch/skills/codex-autoresearch/` (bundled skill payload)
+- `.agents/plugins/marketplace.json`
+
+To run the plugin-distribution workflow locally:
+
+1. Keep the plugin payload in sync with repository edits that affect skill behavior.
+2. Run the marketplace manifest through `marketplace.json` and keep plugin policy values aligned with desired install behavior.
+3. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
+
+For a fresh plugin creation, use the scaffold script:
+
+```text
+python C:/Users/xmale/.codex/skills/.system/plugin-creator/scripts/create_basic_plugin.py codex-autoresearch --with-skills --with-marketplace
 ```
 
 ## Design Differences From The Reference Repo
@@ -90,7 +112,7 @@ python scripts/autoresearch_runtime_ctl.py stop
 This version is intentionally narrower than the upstream reference:
 
 - fewer protocol files
-- fewer runtime commands
+- fewer runtime commands (focused on deterministic run-state control)
 - smaller helper surface area
 - tests focused on artifact semantics instead of end-to-end process orchestration
 
