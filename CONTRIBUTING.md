@@ -21,7 +21,7 @@ Use this sequence whenever you want GitHub-backed plugin installs to pick up you
 2. Run `python3 scripts/sync_plugin_payload.py`.
 3. Update `plugins/codex-autoresearch/.codex-plugin/plugin.json` when the plugin's user-facing metadata changes.
 4. Update `CHANGELOG.md` for user-facing releases.
-5. Run the plugin distribution checks.
+5. Run the appropriate contributor gate.
 6. Push to `main`.
 
 GitHub-backed installs resolve `plugins/codex-autoresearch` from `main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
@@ -35,15 +35,26 @@ GitHub-backed installs resolve `plugins/codex-autoresearch` from `main`, so plug
 
 ## Validation
 
-Run these checks before opening a release-oriented change:
+Use the contributor gate that matches the scope of your change:
+
+```bash
+python3 scripts/run_contributor_gate.py packaging
+python3 scripts/run_contributor_gate.py skill
+```
+
+`packaging` is the lighter release-oriented gate: sync check, distribution validator, and plugin-distribution tests.
+`skill` adds the full pytest suite plus a temporary background-control smoke test that exercises `launch`, `status`, `stop`, `resume`, and `complete`.
+
+If you need the individual commands, the contributor gate is composed from:
 
 ```bash
 python3 scripts/sync_plugin_payload.py --check
 python3 scripts/check_plugin_distribution.py
 python3 -m pytest tests/test_plugin_distribution.py
+python3 -m pytest -q
 ```
 
-The sync check catches drift between the root source and the packaged plugin payload. The distribution validator checks the packaged plugin payload, mirrored files, and marketplace metadata. The plugin distribution test suite exercises parity and GitHub-source expectations. GitHub Actions reruns the same checks on pushes and pull requests.
+GitHub Actions reruns the same contributor gate on pushes and pull requests.
 
 ## Documentation
 

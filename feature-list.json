@@ -52,7 +52,7 @@
       "GitHub Actions fails when the packaged plugin payload drifts from the root source of truth",
       "Contributor documentation defines the edit, sync, validate, and push workflow for updates that should reach GitHub-backed plugin installs"
     ],
-    "notes": "Added scripts/sync_plugin_payload.py, a plugin-distribution GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
+    "notes": "Added scripts/sync_plugin_payload.py, a contributor-gate GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
   },
   {
     "id": "local_plugin_fallback_bootstrap",
@@ -64,5 +64,27 @@
       "Existing marketplace entries for unrelated plugins are preserved during bootstrap"
     ],
     "notes": "Added scripts/bootstrap_local_plugin.py and docs/LOCAL-FALLBACK-BOOTSTRAP.md to handle machine-local Codex plugin discovery when GitHub sync fails."
+  },
+  {
+    "id": "runtime_hard_invariants",
+    "name": "Short runtime re-anchoring contract for resumed and long-running work",
+    "status": "complete",
+    "acceptance_tests": [
+      "SKILL.md references the runtime hard invariants document",
+      "The runtime hard invariants document gives a short checklist for start, resume, and drift recovery",
+      "A focused contract test fails if the runtime hard invariants wiring disappears"
+    ],
+    "notes": "Added references/runtime-hard-invariants.md and a lightweight skill-contract test so the compact runtime checklist stays part of the public protocol."
+  },
+  {
+    "id": "contributor_gate",
+    "name": "Cross-platform contributor gate for packaging and skill validation",
+    "status": "complete",
+    "acceptance_tests": [
+      "Packaging mode runs sync, distribution validation, and plugin-distribution tests",
+      "Skill mode runs the full pytest suite in addition to packaging checks",
+      "The runtime smoke path exercises background launch, status, stop, resume, and complete against a temporary repo"
+    ],
+    "notes": "Added scripts/run_contributor_gate.py, focused tests for its planning/runtime-smoke behavior, and documentation/CI wiring so contributors have one obvious validation entrypoint."
   }
 ]

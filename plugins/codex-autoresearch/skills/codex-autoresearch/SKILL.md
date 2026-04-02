@@ -15,9 +15,10 @@ When the skill is invoked:
 
 1. Read `references/core-principles.md`.
 2. Read `references/structured-output-spec.md`.
-3. For a new interactive run, also read `references/interaction-wizard.md`, `references/plan-workflow.md`, and `references/loop-workflow.md`.
-4. For state and results semantics, also read `references/state-management.md` and `references/results-logging.md`.
-5. If the user asks for a specialized mode, also read the matching workflow reference:
+3. For runtime re-anchoring, also read `references/runtime-hard-invariants.md`.
+4. For a new interactive run, also read `references/interaction-wizard.md`, `references/plan-workflow.md`, and `references/loop-workflow.md`.
+5. For state and results semantics, also read `references/state-management.md` and `references/results-logging.md`.
+6. If the user asks for a specialized mode, also read the matching workflow reference:
    - `references/debug-workflow.md`
    - `references/fix-workflow.md`
    - `references/learn-workflow.md`
@@ -25,8 +26,8 @@ When the skill is invoked:
    - `references/scenario-workflow.md`
    - `references/security-workflow.md`
    - `references/ship-workflow.md`
-6. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
-7. Prefer the bundled helpers over manual edits to run artifacts.
+7. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
+8. Prefer the bundled helpers over manual edits to run artifacts.
 
 ## Required Internal Fields
 

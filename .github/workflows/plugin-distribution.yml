@@ -1,11 +1,11 @@
-name: Plugin Distribution
+name: Contributor Gate
 
 on:
   pull_request:
   push:
 
 jobs:
-  validate-plugin-distribution:
+  contributor-gate:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -19,11 +19,5 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install --upgrade pip pytest
 
-      - name: Check bundled plugin drift
-        run: python scripts/sync_plugin_payload.py --check
-
-      - name: Validate plugin distribution metadata
-        run: python scripts/check_plugin_distribution.py
-
-      - name: Run plugin distribution tests
-        run: python -m pytest tests/test_plugin_distribution.py
+      - name: Run contributor gate
+        run: python scripts/run_contributor_gate.py skill

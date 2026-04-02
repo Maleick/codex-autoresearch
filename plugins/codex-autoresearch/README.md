@@ -22,6 +22,7 @@ The auxiliary manifest files stay as valid JSON objects even when they are inten
 - Manifest: `.codex-plugin/plugin.json`
 - Sync: `python3 scripts/sync_plugin_payload.py`
 - Validation: `python3 scripts/check_plugin_distribution.py`
+- Gate: `python3 scripts/run_contributor_gate.py packaging`
 
 When making changes to the root skill, sync this package, run the distribution checks, and then push to `main` so GitHub-backed installs can pick up the updated packaged payload on reload.
 Only add icon, logo, or screenshot fields to `plugin.json` after the referenced asset files exist.
