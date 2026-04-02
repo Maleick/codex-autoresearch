@@ -4,16 +4,20 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
 
-from scripts.sync_plugin_payload import sync_payload
+try:
+    from scripts.sync_plugin_payload import sync_payload
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from sync_plugin_payload import sync_payload
 
 
 PLUGIN_NAME = "codex-autoresearch"
-DEFAULT_MARKETPLACE_NAME = "openai-curated"
-DEFAULT_MARKETPLACE_DISPLAY_NAME = "OpenAI Curated"
+DEFAULT_MARKETPLACE_NAME = "local-plugins"
+DEFAULT_MARKETPLACE_DISPLAY_NAME = "Local Plugins"
 
 
 class BootstrapError(RuntimeError):
@@ -71,6 +75,47 @@ def load_repo_marketplace_entry(repo_root: Path) -> dict[str, Any]:
     return copy.deepcopy(entry)
 
 
+def home_root_for_marketplace(marketplace_path: Path) -> Path:
+    try:
+        return marketplace_path.resolve().parents[2]
+    except IndexError as exc:
+        raise BootstrapError(
+            "Marketplace path must live under a home-style root such as ~/.agents/plugins/marketplace.json"
+        ) from exc
+
+
+def local_source_path(*, home_root: Path, install_root: Path) -> str:
+    relative = os.path.relpath((install_root / PLUGIN_NAME).resolve(), home_root.resolve())
+    if relative == "." or relative.startswith(".."):
+        raise BootstrapError(
+            f"Install root must stay inside the marketplace home root: install_root={install_root}, home_root={home_root}"
+        )
+    return f"./{relative.replace(os.sep, '/')}"
+
+
+def build_local_plugin_entry(
+    repo_entry: dict[str, Any],
+    *,
+    home_root: Path,
+    install_root: Path,
+) -> dict[str, Any]:
+    entry = copy.deepcopy(repo_entry)
+    if entry.get("name") != PLUGIN_NAME:
+        raise BootstrapError(
+            f"Unexpected plugin name in repo marketplace entry: {entry.get('name')!r}"
+        )
+    source = entry.get("source")
+    if not isinstance(source, dict) or source.get("source") != "github":
+        raise BootstrapError(
+            "Repo marketplace entry must stay GitHub-backed; the local fallback installer rewrites that source for the machine-local marketplace."
+        )
+    entry["source"] = {
+        "source": "local",
+        "path": local_source_path(home_root=home_root, install_root=install_root),
+    }
+    return entry
+
+
 def ensure_marketplace_payload(
     payload: dict[str, Any],
     *,
@@ -94,9 +139,7 @@ def ensure_marketplace_payload(
     if display_name is None:
         interface["displayName"] = marketplace_display_name
     elif not isinstance(display_name, str) or not display_name.strip():
-        raise BootstrapError(
-            "Marketplace manifest interface.displayName must be a non-empty string"
-        )
+        raise BootstrapError("Marketplace interface.displayName must be a non-empty string")
 
     plugins = payload.get("plugins")
     if plugins is None:
@@ -107,6 +150,22 @@ def ensure_marketplace_payload(
     return name, plugins
 
 
+def validate_existing_local_entries(plugins: list[Any]) -> None:
+    for entry in plugins:
+        if not isinstance(entry, dict):
+            raise BootstrapError("Marketplace plugin entries must be JSON objects")
+        if entry.get("name") == PLUGIN_NAME:
+            continue
+        source = entry.get("source")
+        if not isinstance(source, dict):
+            raise BootstrapError("Marketplace plugin entries must contain a source object")
+        if source.get("source") != "local":
+            raise BootstrapError(
+                "Local fallback marketplace entries must use source='local'; "
+                f"found {source.get('source')!r} for {entry.get('name')!r}"
+            )
+
+
 def merge_marketplace_entry(
     marketplace_path: Path,
     plugin_entry: dict[str, Any],
@@ -114,17 +173,13 @@ def merge_marketplace_entry(
     marketplace_name: str,
     marketplace_display_name: str,
 ) -> dict[str, str]:
-    if not marketplace_name.strip():
-        raise BootstrapError("Marketplace name must be a non-empty string")
-    if not marketplace_display_name.strip():
-        raise BootstrapError("Marketplace display name must be a non-empty string")
-
     payload = load_json(marketplace_path) if marketplace_path.exists() else {}
     effective_name, plugins = ensure_marketplace_payload(
         payload,
         marketplace_name=marketplace_name,
         marketplace_display_name=marketplace_display_name,
     )
+    validate_existing_local_entries(plugins)
 
     existing_index = next(
         (
@@ -151,7 +206,7 @@ def merge_marketplace_entry(
 def remove_path(path: Path) -> None:
     if not path.exists():
         return
-    if path.is_symlink() or path.is_file():
+    if path.is_file() or path.is_symlink():
         path.unlink()
         return
     shutil.rmtree(path)
@@ -184,13 +239,21 @@ def bootstrap_local_plugin(
     sync_source: bool = True,
 ) -> dict[str, str]:
     repo_root = repo_root.resolve()
+    install_root = install_root.expanduser().resolve()
+    marketplace_path = marketplace_path.expanduser().resolve()
+
     if sync_source:
         sync_payload(repo_root)
 
     install_target = copy_installed_plugin(repo_root, install_root)
-    plugin_entry = load_repo_marketplace_entry(repo_root)
+    home_root = home_root_for_marketplace(marketplace_path)
+    plugin_entry = build_local_plugin_entry(
+        load_repo_marketplace_entry(repo_root),
+        home_root=home_root,
+        install_root=install_root,
+    )
     marketplace_result = merge_marketplace_entry(
-        marketplace_path.expanduser().resolve(),
+        marketplace_path,
         plugin_entry,
         marketplace_name=marketplace_name,
         marketplace_display_name=marketplace_display_name,
@@ -202,6 +265,7 @@ def bootstrap_local_plugin(
         "marketplace_name": effective_marketplace_name,
         "marketplace_path": marketplace_result["marketplace_path"],
         "plugin_reference": f"{PLUGIN_NAME}@{effective_marketplace_name}",
+        "source_path": plugin_entry["source"]["path"],
         "source_sync": "synced" if sync_source else "skipped",
     }
 
@@ -209,8 +273,8 @@ def bootstrap_local_plugin(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Install the packaged codex-autoresearch plugin into a local Codex "
-            "plugin directory and merge its marketplace fallback entry."
+            "Install the packaged codex-autoresearch plugin into a machine-local "
+            "plugin directory and merge a local-source marketplace fallback entry."
         )
     )
     parser.add_argument(
@@ -219,10 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--install-root",
-        help=(
-            "Target plugin root directory. "
-            f"Defaults to {default_install_root()}."
-        ),
+        help=f"Target plugin root directory. Defaults to {default_install_root()}.",
     )
     parser.add_argument(
         "--marketplace",
@@ -282,8 +343,9 @@ def main() -> int:
         f"{payload['marketplace_action'].capitalize()} marketplace entry in "
         f"{payload['marketplace_path']}"
     )
+    print(f"Local marketplace source path: {payload['source_path']}")
     print(f"Enabled plugin reference: {payload['plugin_reference']}")
-    print("Reload Codex after updating enabled_plugins if it is already running.")
+    print("Reload Codex after updating enabled plugins if it is already running.")
     return 0
 
 

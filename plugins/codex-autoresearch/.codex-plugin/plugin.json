@@ -1,7 +1,7 @@
 {
   "name": "codex-autoresearch",
   "version": "1.0.3",
-  "description": "Codex skill bundle for repeatable, metric-driven improvement loops with planning, specialization workflows, and background controls.",
+  "description": "Codex skill bundle for subagent-first, repeatable improvement loops with pre-launch approval, persistent orchestration, specialization workflows, and background controls.",
   "author": {
     "name": "Maleick",
     "email": "maleick@users.noreply.github.com",
@@ -21,8 +21,8 @@
   "apps": "./.app.json",
   "interface": {
     "displayName": "Autoresearch",
-    "shortDescription": "Run measurable foreground or background improve-verify loops.",
-    "longDescription": "Codex Autoresearch supports iterative, measurable improvements with explicit goals, scoped workflows, managed session hooks, memory carry-forward, and packaged plugin release validation.",
+    "shortDescription": "Run subagent-first foreground or background improve-verify loops.",
+    "longDescription": "Codex Autoresearch supports iterative, measurable improvements with a standing subagent pool, pre-launch approval, continued execution by default after launch, scoped workflows, managed session hooks, memory carry-forward, and packaged plugin release validation.",
     "developerName": "Maleick",
     "category": "Productivity",
     "capabilities": [

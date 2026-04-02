@@ -7,6 +7,8 @@ This repository is an original implementation inspired by the workflow shape of 
 
 It now also includes a guided planning wizard and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
 
+Autoresearch is now subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available, delegates focused work, and merges the results back into the loop. The approval boundary stays in setup; after launch, the orchestrator keeps the loop moving until you stop it, the configured stop condition is met, or a real blocker requires human input.
+
 Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearch`, this repo now supports explicit wall-clock caps for unattended runs, so an overnight plan can be bounded by both iterations and elapsed time.
 The current release also adds managed session hooks, a foreground completion helper, automatic memory carry-forward into the next run, and a dedicated plugin-distribution validator for the packaged Codex plugin.
 
@@ -15,9 +17,10 @@ The current release also adds managed session hooks, a foreground completion hel
 - `SKILL.md`: the skill entrypoint Codex reads when the bundle is activated
 - `agents/openai.yaml`: launcher metadata for Codex-compatible UIs
 - `references/`: short protocol documents that keep the loop grounded
+- `references/runtime-hard-invariants.md`: a short re-anchor checklist for resumed or long-running runs
 - `references/*-workflow.md`: specialized protocols for planning, debugging, fixing, documentation, prediction, scenarios, security, and shipping
-- `scripts/`: Python helpers for run setup, iteration logging, completion, hook installation, plugin payload sync and validation, and supervisor control
-- `tests/`: unit tests for artifact semantics, hooks, and plugin-distribution coverage
+- `scripts/`: Python helpers for run setup, iteration logging, completion, hook installation, plugin payload sync and validation, supervisor control, and contributor gates
+- `tests/`: unit tests for artifact semantics, hooks, skill contracts, contributor gates, and plugin-distribution coverage
 
 ## Core Ideas
 
@@ -124,6 +127,18 @@ python scripts/autoresearch_hooks_ctl.py uninstall
 The hook installer writes under `$CODEX_HOME` and keeps a manifest so it can remove only the managed hook entries later.
 Those same hook and context files are mirrored into the packaged plugin payload so marketplace installs preserve the same resumed-session behavior.
 
+## Contributor Gate
+
+For maintainers, the repo now includes a single entrypoint for self-checks:
+
+```text
+python3 scripts/run_contributor_gate.py packaging
+python3 scripts/run_contributor_gate.py skill
+```
+
+`packaging` runs the sync check, distribution validator, and plugin-distribution tests.
+`skill` runs those checks, the full pytest suite, and a temporary background-control smoke test that exercises `launch`, `status`, `stop`, `resume`, and `complete`.
+
 ## Plugin Packaging
 
 This repository also includes a local plugin artifact at:
@@ -140,12 +155,13 @@ To update the GitHub-backed plugin safely:
 3. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing plugin changes.
 4. Update `CHANGELOG.md` with release notes before tagging a user-facing release.
 5. Keep `.agents/plugins/marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
-6. Run `python3 scripts/check_plugin_distribution.py` and `python3 -m pytest tests/test_plugin_distribution.py`.
+6. Run `python3 scripts/run_contributor_gate.py packaging` or the equivalent underlying checks.
 7. Push to `main`; the marketplace entry points at `Maleick/codex-autoresearch`, so GitHub-backed installs will pick up the packaged plugin after Codex reloads.
-8. CI reruns the sync check, distribution validator, and plugin distribution tests on pushes and pull requests.
+8. CI reruns the contributor gate on pushes and pull requests.
 9. Add release-ready assets under `plugins/codex-autoresearch/assets` only when you also wire those files into `plugin.json`.
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
+If a specific machine cannot install the GitHub-backed plugin directly, run `python3 scripts/bootstrap_local_plugin.py` to populate the supported machine-local fallback under `~/plugins`; see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 The plugin marketplace card text is sourced from `plugins/codex-autoresearch/.codex-plugin/plugin.json`, so keep that interface metadata aligned with the current README language when cutting a release.
 
@@ -162,6 +178,6 @@ This version is intentionally narrower than the upstream reference:
 - fewer protocol files
 - fewer runtime commands (focused on deterministic run-state control)
 - smaller helper surface area
-- tests focused on artifact semantics instead of end-to-end process orchestration
+- lighter-weight contributor/runtime validation instead of full end-to-end orchestration
 
 That keeps the bundle easier to audit and extend while preserving the key behavior: initialize state, log experiments, guide the user through setup, and make deterministic stop-or-continue decisions.

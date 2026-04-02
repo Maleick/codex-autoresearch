@@ -69,9 +69,7 @@ For machine-local fallback setup when Codex cannot refresh GitHub-backed plugins
 Before shipping the plugin payload, run:
 
 ```bash
-python3 scripts/sync_plugin_payload.py --check
-python3 scripts/check_plugin_distribution.py
-python3 -m pytest tests/test_plugin_distribution.py
+python3 scripts/run_contributor_gate.py packaging
 ```
 
-`sync_plugin_payload.py --check` fails when the packaged plugin drifts from the root source. `check_plugin_distribution.py` verifies root-to-plugin parity, auxiliary manifest validity, and marketplace metadata. GitHub Actions reruns the same checks on pushes and pull requests. Leave icon/logo/screenshot fields out of the plugin manifest until the referenced files actually exist under `plugins/codex-autoresearch/assets`.
+That gate runs `sync_plugin_payload.py --check`, `check_plugin_distribution.py`, and the plugin-distribution pytest suite together. For behavior-changing work, prefer `python3 scripts/run_contributor_gate.py skill`, which also runs the full pytest suite and a temporary background-control smoke test. GitHub Actions reruns the same contributor gate on pushes and pull requests. Leave icon/logo/screenshot fields out of the plugin manifest until the referenced files actually exist under `plugins/codex-autoresearch/assets`.

@@ -21,6 +21,8 @@
 4. Only update `metric.best` on strict improvement.
 5. Set `flags.needs_human=true` when autonomous progress should stop for user input.
 6. For detached runs, `flags.background_active` reflects whether a background owner is currently expected to continue the loop.
+7. The orchestrator is the only agent that mutates `autoresearch-state.json`; subagents can recommend outcomes but should not write authoritative state.
+8. If the standing subagent pool becomes unavailable, continue in serial orchestrator mode unless a real blocker requires `needs_human`.
 
 ## Resume Semantics
 
@@ -32,3 +34,4 @@
 ## Completion Semantics
 
 - `python scripts/autoresearch_runtime_ctl.py complete` moves a background run to `completed`, clears `background_active`, and ends the detached session lifecycle.
+- Completion should reflect the orchestrator's final decision after it has folded the latest subagent findings back into the run state.

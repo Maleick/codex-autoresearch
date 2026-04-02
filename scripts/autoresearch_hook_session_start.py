@@ -8,8 +8,10 @@ from autoresearch_hook_common import build_context
 CHECKLIST_LINES = (
     "- If this is a fresh run, baseline first, then initialize results/state artifacts.",
     "- Record every completed experiment before starting the next one.",
+    "- Keep the standing subagent pool aligned with the latest goal, findings, and objections before another code change.",
     "- Keep retain/stop label gates satisfied before marking an iteration as kept.",
     "- Respect iteration and duration caps; use status --report-path when you need a report.",
+    "- After launch approval, continue by default unless the user stops the run or a real blocker forces needs_human.",
     "- If autoresearch-memory.md exists at repo root, the next setup and launch flow should carry it automatically; review it before overriding.",
 )
 

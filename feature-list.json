@@ -52,17 +52,61 @@
       "GitHub Actions fails when the packaged plugin payload drifts from the root source of truth",
       "Contributor documentation defines the edit, sync, validate, and push workflow for updates that should reach GitHub-backed plugin installs"
     ],
-    "notes": "Added scripts/sync_plugin_payload.py, a plugin-distribution GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
+    "notes": "Added scripts/sync_plugin_payload.py, a contributor-gate GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
   },
   {
     "id": "local_plugin_fallback_bootstrap",
     "name": "Local plugin fallback bootstrap for machine-local marketplace",
     "status": "complete",
     "acceptance_tests": [
-      "Helper script can sync the plugin payload, copy it to a local plugins directory, and merge its entry into a local marketplace manifest",
+      "Helper script can sync the plugin payload, copy it to a local plugins directory, and merge a local-source entry into a machine-local marketplace manifest",
       "Bootstrapped marketplace identifier correctly matches the enabled-plugin reference",
-      "Existing marketplace entries for unrelated plugins are preserved during bootstrap"
+      "Existing local marketplace entries for unrelated plugins are preserved during bootstrap"
     ],
-    "notes": "Added scripts/bootstrap_local_plugin.py and docs/LOCAL-FALLBACK-BOOTSTRAP.md to handle machine-local Codex plugin discovery when GitHub sync fails."
+    "notes": "Added scripts/bootstrap_local_plugin.py and docs/LOCAL-FALLBACK-BOOTSTRAP.md to handle machine-local Codex plugin discovery when GitHub sync fails or the local runtime rejects non-local marketplace sources."
+  },
+  {
+    "id": "runtime_hard_invariants",
+    "name": "Short runtime re-anchoring contract for resumed and long-running work",
+    "status": "complete",
+    "acceptance_tests": [
+      "SKILL.md references the runtime hard invariants document",
+      "The runtime hard invariants document gives a short checklist for start, resume, and drift recovery",
+      "A focused contract test fails if the runtime hard invariants wiring disappears"
+    ],
+    "notes": "Added references/runtime-hard-invariants.md and a lightweight skill-contract test so the compact runtime checklist stays part of the public protocol."
+  },
+  {
+    "id": "contributor_gate",
+    "name": "Cross-platform contributor gate for packaging and skill validation",
+    "status": "complete",
+    "acceptance_tests": [
+      "Packaging mode runs sync, distribution validation, and plugin-distribution tests",
+      "Skill mode runs the full pytest suite in addition to packaging checks",
+      "The runtime smoke path exercises background launch, status, stop, resume, and complete against a temporary repo"
+    ],
+    "notes": "Added scripts/run_contributor_gate.py, focused tests for its planning/runtime-smoke behavior, and documentation/CI wiring so contributors have one obvious validation entrypoint."
+  },
+  {
+    "id": "subagent_first_skill_contract",
+    "name": "Subagent-first skill contract and contributor expectations",
+    "status": "complete",
+    "acceptance_tests": [
+      "tests/test_skill_contract.py verifies the runtime hard invariants anchor and the contributor-maintenance expectations",
+      "CONTRIBUTING.md explains how to update the subagent-first skill contract and the lightweight verification surface together",
+      "feature-list.json records the contract work as a tracked feature entry"
+    ],
+    "notes": "Tracks the new maintenance contract so future updates keep the verification and contributor guidance aligned."
+  },
+  {
+    "id": "subagent_orchestration_runtime",
+    "name": "Subagent orchestration helper, continuation policy, and orchestrator-owned state contract",
+    "status": "complete",
+    "acceptance_tests": [
+      "scripts/autoresearch_subagent_plan.py emits a stable standing-pool plan with orchestrator ownership and serial fallback metadata",
+      "Wizard, state, and launch-manifest payloads include subagent_pool and continuation_policy fields",
+      "Hook and contract tests verify the post-launch continuation wording and the orchestrator-only state/result ownership rules"
+    ],
+    "notes": "Adds a concrete subagent-pool planner plus helper/runtime metadata so the skill can stay subagent-first without relying on prose alone."
   }
 ]
