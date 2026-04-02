@@ -1,6 +1,6 @@
 {
   "name": "codex-autoresearch",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Codex skill bundle for repeatable, metric-driven improvement loops with planning, specialization workflows, and background controls.",
   "author": {
     "name": "Maleick",
@@ -21,8 +21,8 @@
   "apps": "./.app.json",
   "interface": {
     "displayName": "Autoresearch",
-    "shortDescription": "Run structured improve-verify loops with scoped workflows.",
-    "longDescription": "Codex Autoresearch supports iterative, measurable improvements with explicit goals, scoped workflows, and background run controls for larger jobs.",
+    "shortDescription": "Run measurable foreground or background improve-verify loops.",
+    "longDescription": "Codex Autoresearch supports iterative, measurable improvements with explicit goals, scoped workflows, managed session hooks, memory carry-forward, and packaged plugin release validation.",
     "developerName": "Maleick",
     "category": "Productivity",
     "capabilities": [
@@ -34,9 +34,9 @@
     "privacyPolicyURL": "https://github.com/Maleick/codex-autoresearch/blob/main/README.md",
     "termsOfServiceURL": "https://github.com/Maleick/codex-autoresearch/blob/main/LICENSE",
     "defaultPrompt": [
-      "Run a 10-step hardening pass on this repository using codex-autoresearch.",
-      "Use the debug workflow to isolate recurring failures before writing code changes.",
-      "Use ship workflow to stabilize this repo for release."
+      "Run a 10-step background hardening pass on this repository using codex-autoresearch.",
+      "Resume the last autoresearch run and reuse the stored memory baseline.",
+      "Use the ship workflow to stabilize this repo and validate the plugin release surface."
     ],
     "brandColor": "#0F766E"
   }

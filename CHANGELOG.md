@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.3 - 2026-04-02
+
+- added managed SessionStart/Stop hook support, repo-local hook context tracking, and mirrored plugin hook files for resumed or unattended autoresearch runs
+- added foreground completion via `scripts/autoresearch_complete_run.py` plus automatic self-improvement and memory carry-forward artifacts for the next run
+- added `scripts/check_plugin_distribution.py`, contributor/install docs, and release-time validation coverage for the packaged plugin payload
+- refreshed README release copy and plugin marketplace interface text to reflect the current runtime, packaging, and release workflow
+
 ## v1.0.2 - 2026-04-02
 
 - fixed plugin distribution coverage to validate the shipped GitHub marketplace source and root-to-plugin payload parity

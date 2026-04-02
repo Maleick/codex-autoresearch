@@ -1,5 +1,5 @@
 # Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/Maleick/codex-autoresearch?style=flat-square&label=release)](https://github.com/Maleick/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/Maleick/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-> **v1.0.2** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Autonomous, metric-driven iteration for Codex.
+> **v1.0.3** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Autonomous, metric-driven iteration for Codex.
 
 Autonomous, metric-driven iteration for Codex.
 
@@ -8,6 +8,7 @@ This repository is an original implementation inspired by the workflow shape of 
 It now also includes a guided planning wizard and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
 
 Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearch`, this repo now supports explicit wall-clock caps for unattended runs, so an overnight plan can be bounded by both iterations and elapsed time.
+The current release also adds managed session hooks, a foreground completion helper, automatic memory carry-forward into the next run, and a dedicated plugin-distribution validator for the packaged Codex plugin.
 
 ## What This Repo Contains
 
@@ -15,8 +16,8 @@ Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearc
 - `agents/openai.yaml`: launcher metadata for Codex-compatible UIs
 - `references/`: short protocol documents that keep the loop grounded
 - `references/*-workflow.md`: specialized protocols for planning, debugging, fixing, documentation, prediction, scenarios, security, and shipping
-- `scripts/`: Python helpers for run setup, iteration logging, and supervisor control
-- `tests/`: unit tests for the artifact-management helpers
+- `scripts/`: Python helpers for run setup, iteration logging, completion, hook installation, distribution validation, and supervisor control
+- `tests/`: unit tests for artifact semantics, hooks, and plugin-distribution coverage
 
 ## Core Ideas
 
@@ -120,6 +121,7 @@ python scripts/autoresearch_hooks_ctl.py uninstall
 ```
 
 The hook installer writes under `$CODEX_HOME` and keeps a manifest so it can remove only the managed hook entries later.
+Those same hook and context files are mirrored into the packaged plugin payload so marketplace installs preserve the same resumed-session behavior.
 
 ## Plugin Packaging
 
@@ -143,6 +145,7 @@ To run the plugin-distribution workflow locally:
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
+The plugin marketplace card text is sourced from `plugins/codex-autoresearch/.codex-plugin/plugin.json`, so keep that interface metadata aligned with the current README language when cutting a release.
 
 For a fresh plugin creation, use the scaffold script:
 
