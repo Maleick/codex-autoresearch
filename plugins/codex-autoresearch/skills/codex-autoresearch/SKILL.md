@@ -1,6 +1,6 @@
 ---
 name: codex-autoresearch
-description: "Run a subagent-first structured improve-verify loop in Codex. Use this when the user wants an autonomous or semi-autonomous iteration cycle toward a measurable goal, with the main agent orchestrating a standing subagent pool for repeated debugging, cleanup, hardening, or release-readiness work."
+description: "Run a subagent-first structured improve-verify loop in Codex. Use this when the user wants an autonomous or semi-autonomous iteration cycle toward a measurable goal, with the main agent orchestrating a standing subagent pool for debugging, cleanup, hardening, or release-readiness work."
 metadata:
   short-description: "Run a subagent-first autoresearch loop"
 ---
@@ -34,10 +34,10 @@ When the skill is invoked:
 
 The main agent is the orchestrator. Subagents are the standing execution pool.
 
-- Keep a small, persistent subagent pool alive across iterations instead of starting from scratch on every pass.
+- Keep a small, persistent subagent pool alive across iterations instead of re-spawning ad hoc workers every round.
 - Use subagents for bounded context gathering, alternative generation, verification, and critique.
-- Feed subagent findings back into the next iteration before making another change.
-- Keep the local bundle narrower than the reference repo: follow the compact references in this repository instead of adopting the full upstream specialist surface.
+- Feed subagent findings back into the next iteration before making another code change.
+- Keep the local bundle narrower than the reference repo: use the compact references and helpers in this repository instead of expanding into a larger specialist surface unless the user asks for it.
 - The main agent owns the final decision, the edit, and the run state.
 - Approval belongs before launch. After launch, continue by default unless the user stops the run, the configured stop condition is reached, or a real `needs_human` blocker appears.
 
@@ -119,8 +119,6 @@ At minimum:
 ## Notes
 
 This skill bundle does not attempt to prescribe one exact Codex runtime environment. It gives Codex a stable protocol and file format so the interactive workflow and any external runner can share state cleanly.
-
-This bundle is intentionally narrower than the reference repo. It keeps the orchestration contract, runtime re-anchoring, and loop semantics without importing the full upstream surface area.
 
 ## Plugin Distribution
 
