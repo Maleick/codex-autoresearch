@@ -199,6 +199,9 @@ def test_runtime_launch_manifest_points_at_artifacts(tmp_path):
     assert manifest["run_tag"] == "nightly-build"
     assert manifest["duration"] == "5h"
     assert manifest["duration_seconds"] == 18000
+    assert manifest["subagent_pool"]["standing_pool"] is True
+    assert manifest["subagent_pool"]["orchestrator_role_id"] == "orchestrator"
+    assert manifest["continuation_policy"]["post_launch_default"] == "continue"
     assert manifest["artifact_paths"]["launch"].endswith("autoresearch-launch.json")
 
 
@@ -258,11 +261,40 @@ def test_runtime_launch_dry_run_returns_preview_without_writing_files(tmp_path):
     )
 
     assert payload["status"] == "dry_run"
+    assert payload["state_preview"]["subagent_pool"]["standing_pool"] is True
+    assert payload["state_preview"]["continuation_policy"]["stop_conditions"] == [
+        "user_stop",
+        "configured_stop_condition",
+        "needs_human",
+    ]
+    assert payload["launch_manifest_preview"]["subagent_pool"]["state_owner"] == "orchestrator"
     assert payload["state_preview"]["duration_seconds"] == 18000
     assert payload["state_preview"]["label_requirements"]["keep"] == ["verified"]
     assert payload["launch_manifest_preview"]["required_stop_labels"] == ["ship-ready"]
     assert not resolve_path(repo, None, "autoresearch-state.json").exists()
     assert not resolve_path(repo, None, "autoresearch-launch.json").exists()
+
+
+def test_setup_summary_includes_subagent_pool_and_continuation_policy(tmp_path):
+    repo = str(tmp_path)
+    summary = build_setup_summary(
+        repo=repo,
+        config=WizardConfig(
+            goal="Reduce flaky tests",
+            scope="tests/integration",
+            metric="failing tests",
+            direction="lower",
+            verify="pytest -q",
+            guard="python3 scripts/check_plugin_distribution.py",
+            mode="foreground",
+            iterations=3,
+        ),
+    )
+
+    assert summary["subagent_pool"]["standing_pool"] is True
+    assert summary["subagent_pool"]["orchestrator_role_id"] == "orchestrator"
+    assert summary["continuation_policy"]["approval_boundary"] == "pre_launch"
+    assert summary["continuation_policy"]["completion_requires_review"] is True
 
 
 def test_write_launch_manifest_requires_fresh_start_to_replace_existing(tmp_path):
@@ -1079,4 +1111,3 @@ def test_append_iteration_rejects_invalid_result_statuses(tmp_path, field_name, 
 
     with pytest.raises(RuntimeError):
         append_iteration(**kwargs)
-

@@ -12,13 +12,16 @@ NONTERMINAL_DECISIONS = {"relaunch"}
 CONTINUATION_PROMPT = (
     "Continue the current autoresearch run.\n"
     "Do not rerun the wizard.\n"
+    "The run was already approved; keep going unless the user stops it or a real needs_human blocker appears.\n"
     "If you just completed an experiment, record it before starting the next one.\n"
+    "Re-anchor the standing subagent pool before the next code change.\n"
     "Honor keep/stop label gates, iteration limits, and duration limits before stopping."
 )
 FOLLOWUP_CONTINUATION_PROMPT = (
     "Continue the current autoresearch run.\n"
     "You are already inside a stop-hook continuation.\n"
-    "Do not stop yet; if you just completed an experiment, record it before the next one."
+    "Do not stop yet; if you just completed an experiment, record it before the next one.\n"
+    "Keep the standing subagent pool aligned with the latest state before you continue."
 )
 
 

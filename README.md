@@ -7,6 +7,8 @@ This repository is an original implementation inspired by the workflow shape of 
 
 It now also includes a guided planning wizard and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
 
+Autoresearch is now subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available, delegates focused work, and merges the results back into the loop. The approval boundary stays in setup; after launch, the orchestrator keeps the loop moving until you stop it, the configured stop condition is met, or a real blocker requires human input.
+
 Compared with `leo-lilinxiao/codex-autoresearch` and `Maleick/claude-autoresearch`, this repo now supports explicit wall-clock caps for unattended runs, so an overnight plan can be bounded by both iterations and elapsed time.
 The current release also adds managed session hooks, a foreground completion helper, automatic memory carry-forward into the next run, and a dedicated plugin-distribution validator for the packaged Codex plugin.
 
@@ -159,6 +161,7 @@ To update the GitHub-backed plugin safely:
 9. Add release-ready assets under `plugins/codex-autoresearch/assets` only when you also wire those files into `plugin.json`.
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
+If a specific machine cannot install the GitHub-backed plugin directly, run `python3 scripts/bootstrap_local_plugin.py` to populate the supported machine-local fallback under `~/plugins`; see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 The plugin marketplace card text is sourced from `plugins/codex-autoresearch/.codex-plugin/plugin.json`, so keep that interface metadata aligned with the current README language when cutting a release.
 

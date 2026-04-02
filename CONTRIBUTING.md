@@ -13,6 +13,15 @@ Treat these root paths as authoritative:
 
 If you change any of them, mirror the corresponding files into `plugins/codex-autoresearch/skills/codex-autoresearch/` before considering the work done.
 
+## Subagent-First Skill Contract
+
+When you change the skill contract or the contributor expectations around it, make the lightweight contract test and verification surfaces part of the same patch:
+
+1. Update `tests/test_skill_contract.py` first so the new expectation is mechanically checked.
+2. Record the work in `feature-list.json` so the contract change is tracked across sessions.
+3. Keep the relevant doc language explicit about the subagent-first skill contract instead of relying on implied process.
+4. Mirror any root source changes into `plugins/codex-autoresearch/skills/codex-autoresearch/` before handing the work off.
+
 ## Edit To Release Workflow
 
 Use this sequence whenever you want GitHub-backed plugin installs to pick up your changes:

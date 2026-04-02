@@ -16,6 +16,8 @@ The TSV header is:
 4. Keep `change_summary` short and specific to the experiment that just finished.
 5. Use `labels` for compact tags such as `test`, `perf`, `retry`, `docs`, or `security`.
 6. Put blocker details, rollback notes, or follow-up context in `note`.
+7. The orchestrator writes the authoritative iteration row. Subagent findings are supporting evidence, not independent retained-state updates.
+8. If multiple subagents contribute to one kept or discarded step, summarize their effect in the same orchestrator-owned row instead of splitting the run state across parallel authoritative rows.
 
 ## Interpretation
 
@@ -24,3 +26,4 @@ The TSV header is:
 - `decision=keep` means the change survived verification and stays in the working tree.
 - `decision=discard` means the change should be rolled back before the next experiment.
 - `decision=needs_human` means the run hit ambiguity or risk that should stop autonomous progress.
+- `labels` or `note` may mention subagent roles, but the orchestrator remains the only owner of the run's authoritative outcome.

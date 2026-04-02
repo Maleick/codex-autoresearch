@@ -11,6 +11,11 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 from uuid import uuid4
 
+try:
+    from scripts.autoresearch_subagent_plan import build_subagent_pool_plan
+except ModuleNotFoundError:
+    from autoresearch_subagent_plan import build_subagent_pool_plan
+
 
 RESULTS_HEADER = [
     "timestamp",
@@ -375,6 +380,19 @@ def load_memory_baseline(repo: str | None, memory_path_value: str | None) -> dic
     }
 
 
+def build_continuation_policy(*, mode: str | None) -> dict[str, Any]:
+    return {
+        "approval_boundary": "pre_launch",
+        "post_launch_default": "continue",
+        "completion_requires_review": mode == "foreground",
+        "stop_conditions": [
+            "user_stop",
+            "configured_stop_condition",
+            "needs_human",
+        ],
+    }
+
+
 def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, Any]:
     verify = config.verify or infer_verify_command(repo)
     guard = config.guard if config.guard is not None else infer_guard_command(repo, verify)
@@ -401,6 +419,12 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
     rollback_strategy = config.rollback_strategy or "discard the current experiment and keep the last verified state"
     metric = config.metric or "primary verify metric"
     scope = infer_scope(repo, config.scope)
+    subagent_pool = build_subagent_pool_plan(
+        goal=config.goal or "pending autoresearch goal",
+        scope=scope,
+        mode=config.mode or "foreground",
+    )
+    continuation_policy = build_continuation_policy(mode=mode)
 
     missing_required: list[str] = []
     if not config.goal:
@@ -484,6 +508,8 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
         "memory": memory,
         "required_keep_labels": required_keep_labels,
         "required_stop_labels": required_stop_labels,
+        "subagent_pool": subagent_pool,
+        "continuation_policy": continuation_policy,
         "stop_condition": stop_condition,
         "rollback_strategy": rollback_strategy,
         "missing_required": missing_required,
@@ -515,6 +541,12 @@ def make_state_payload(
     required_keep_labels = normalize_labels(config.required_keep_labels)
     required_stop_labels = normalize_labels(config.required_stop_labels)
     memory = load_memory_baseline(repo, config.memory_path)
+    subagent_pool = build_subagent_pool_plan(
+        goal=config.goal,
+        scope=config.scope or "current repository",
+        mode=config.mode,
+    )
+    continuation_policy = build_continuation_policy(mode=config.mode)
     deadline_at = (
         (parse_utc_timestamp(now) + timedelta(seconds=duration_seconds)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         if duration_seconds is not None
@@ -544,6 +576,8 @@ def make_state_payload(
         "duration_seconds": duration_seconds,
         "deadline_at": deadline_at,
         "memory": memory,
+        "subagent_pool": subagent_pool,
+        "continuation_policy": continuation_policy,
         "label_requirements": {
             "keep": required_keep_labels,
             "stop": required_stop_labels,
@@ -752,6 +786,12 @@ def build_launch_manifest_payload(
     launch_path = resolve_path(repo, launch_path_value, DEFAULT_LAUNCH_PATH)
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     results_path = resolve_path(repo, results_path_value, DEFAULT_RESULTS_PATH)
+    subagent_pool = build_subagent_pool_plan(
+        goal=config.goal,
+        scope=config.scope or "current repository",
+        mode=config.mode,
+    )
+    continuation_policy = build_continuation_policy(mode=config.mode)
     return {
         "schema_version": 1,
         "written_at": utc_now(),
@@ -767,6 +807,8 @@ def build_launch_manifest_payload(
         "duration": config.duration,
         "duration_seconds": parse_duration_seconds(config.duration),
         "memory": load_memory_baseline(repo, config.memory_path),
+        "subagent_pool": subagent_pool,
+        "continuation_policy": continuation_policy,
         "required_keep_labels": normalize_labels(config.required_keep_labels),
         "required_stop_labels": normalize_labels(config.required_stop_labels),
         "stop_condition": config.stop_condition,

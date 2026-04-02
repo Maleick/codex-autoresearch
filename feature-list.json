@@ -86,5 +86,27 @@
       "The runtime smoke path exercises background launch, status, stop, resume, and complete against a temporary repo"
     ],
     "notes": "Added scripts/run_contributor_gate.py, focused tests for its planning/runtime-smoke behavior, and documentation/CI wiring so contributors have one obvious validation entrypoint."
+  },
+  {
+    "id": "subagent_first_skill_contract",
+    "name": "Subagent-first skill contract and contributor expectations",
+    "status": "complete",
+    "acceptance_tests": [
+      "tests/test_skill_contract.py verifies the runtime hard invariants anchor and the contributor-maintenance expectations",
+      "CONTRIBUTING.md explains how to update the subagent-first skill contract and the lightweight verification surface together",
+      "feature-list.json records the contract work as a tracked feature entry"
+    ],
+    "notes": "Tracks the new maintenance contract so future updates keep the verification and contributor guidance aligned."
+  },
+  {
+    "id": "subagent_orchestration_runtime",
+    "name": "Subagent orchestration helper, continuation policy, and orchestrator-owned state contract",
+    "status": "complete",
+    "acceptance_tests": [
+      "scripts/autoresearch_subagent_plan.py emits a stable standing-pool plan with orchestrator ownership and serial fallback metadata",
+      "Wizard, state, and launch-manifest payloads include subagent_pool and continuation_policy fields",
+      "Hook and contract tests verify the post-launch continuation wording and the orchestrator-only state/result ownership rules"
+    ],
+    "notes": "Adds a concrete subagent-pool planner plus helper/runtime metadata so the skill can stay subagent-first without relying on prose alone."
   }
 ]

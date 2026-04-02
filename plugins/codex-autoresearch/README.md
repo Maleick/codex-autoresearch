@@ -3,6 +3,8 @@
 This directory contains the plugin-packaged version of `codex-autoresearch` for
 local distribution through the Codex plugin marketplace flow.
 
+The packaged experience matches the root bundle's subagent-first model: a standing pool of subagents handles focused work while the main agent stays in the orchestrator role and consolidates the results. Approval belongs before launch; after launch, the orchestrator keeps the run moving until the user stops it, the configured stop condition is met, or a real blocker requires input.
+
 What is included:
 
 - `skills/codex-autoresearch/SKILL.md` for runtime invocation instructions.

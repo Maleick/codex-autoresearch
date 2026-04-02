@@ -1,13 +1,13 @@
 ---
 name: codex-autoresearch
-description: "Run a structured improve-verify loop in Codex. Use this when the user wants an autonomous or semi-autonomous iteration cycle toward a measurable goal, including repeated debugging, cleanup, hardening, or release-readiness work."
+description: "Run a subagent-first structured improve-verify loop in Codex. Use this when the user wants an autonomous or semi-autonomous iteration cycle toward a measurable goal, with the main agent orchestrating a standing subagent pool for repeated debugging, cleanup, hardening, or release-readiness work."
 metadata:
-  short-description: "Run a structured autoresearch loop"
+  short-description: "Run a subagent-first autoresearch loop"
 ---
 
 # codex-autoresearch
 
-Use this skill when the task is larger than a one-shot edit and benefits from repeated experiments with mechanical verification.
+Use this skill when the task is larger than a one-shot edit and benefits from repeated experiments with mechanical verification, parallel subagent input, and a main-agent orchestrator that keeps the loop moving.
 
 ## Activation Contract
 
@@ -15,10 +15,11 @@ When the skill is invoked:
 
 1. Read `references/core-principles.md`.
 2. Read `references/structured-output-spec.md`.
-3. For runtime re-anchoring, also read `references/runtime-hard-invariants.md`.
-4. For a new interactive run, also read `references/interaction-wizard.md`, `references/plan-workflow.md`, and `references/loop-workflow.md`.
-5. For state and results semantics, also read `references/state-management.md` and `references/results-logging.md`.
-6. If the user asks for a specialized mode, also read the matching workflow reference:
+3. Read `references/subagent-orchestration.md`.
+4. For runtime re-anchoring, also read `references/runtime-hard-invariants.md`.
+5. For a new interactive run, also read `references/interaction-wizard.md`, `references/plan-workflow.md`, and `references/loop-workflow.md`.
+6. For state and results semantics, also read `references/state-management.md` and `references/results-logging.md`.
+7. If the user asks for a specialized mode, also read the matching workflow reference:
    - `references/debug-workflow.md`
    - `references/fix-workflow.md`
    - `references/learn-workflow.md`
@@ -26,8 +27,19 @@ When the skill is invoked:
    - `references/scenario-workflow.md`
    - `references/security-workflow.md`
    - `references/ship-workflow.md`
-7. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
-8. Prefer the bundled helpers over manual edits to run artifacts.
+8. For background control (`status`, `stop`, `resume`, `launch`), use the helper scripts in `scripts/`.
+9. Prefer the bundled helpers over manual edits to run artifacts.
+
+## Subagent-First Orchestration
+
+The main agent is the orchestrator. Subagents are the standing execution pool.
+
+- Keep a small, persistent subagent pool alive across iterations instead of starting from scratch on every pass.
+- Use subagents for bounded context gathering, alternative generation, verification, and critique.
+- Feed subagent findings back into the next iteration before making another change.
+- Keep the local bundle narrower than the reference repo: follow the compact references in this repository instead of adopting the full upstream specialist surface.
+- The main agent owns the final decision, the edit, and the run state.
+- Approval belongs before launch. After launch, continue by default unless the user stops the run, the configured stop condition is reached, or a real `needs_human` blocker appears.
 
 ## Required Internal Fields
 
@@ -107,6 +119,8 @@ At minimum:
 ## Notes
 
 This skill bundle does not attempt to prescribe one exact Codex runtime environment. It gives Codex a stable protocol and file format so the interactive workflow and any external runner can share state cleanly.
+
+This bundle is intentionally narrower than the reference repo. It keeps the orchestration contract, runtime re-anchoring, and loop semantics without importing the full upstream surface area.
 
 ## Plugin Distribution
 
