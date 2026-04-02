@@ -76,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def command_launch(args: argparse.Namespace) -> dict:
+    launch_path = resolve_path(args.repo, args.launch_path, DEFAULT_LAUNCH_PATH)
+    if launch_path.exists() and not args.fresh_start:
+        raise AutoresearchError(
+            f"{launch_path} already exists. Use --fresh-start to archive previous artifacts."
+        )
     config = RunConfig(
         goal=args.goal,
         metric=args.metric,
@@ -89,7 +94,7 @@ def command_launch(args: argparse.Namespace) -> dict:
         stop_condition=args.stop_condition,
         baseline=args.baseline,
     )
-    state = initialize_run(
+    initialize_run(
         repo=args.repo,
         results_path_value=args.results_path,
         state_path_value=args.state_path,
@@ -102,11 +107,12 @@ def command_launch(args: argparse.Namespace) -> dict:
         config=config,
         results_path_value=args.results_path,
         state_path_value=args.state_path,
+        fresh_start=args.fresh_start,
     )
-    mark_background_active(repo=args.repo, state_path_value=args.state_path, active=True)
+    state = mark_background_active(repo=args.repo, state_path_value=args.state_path, active=True)
     return {
         "status": "launched",
-        "launch_path": str(resolve_path(args.repo, args.launch_path, DEFAULT_LAUNCH_PATH)),
+        "launch_path": str(launch_path),
         "state": state,
         "launch_manifest": launch,
     }

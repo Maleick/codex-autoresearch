@@ -92,3 +92,22 @@ At minimum:
 ## Notes
 
 This skill bundle does not attempt to prescribe one exact Codex runtime environment. It gives Codex a stable protocol and file format so the interactive workflow and any external runner can share state cleanly.
+
+## Plugin Distribution
+
+Treat the repository root as the source of truth for this skill bundle.
+
+When shipping the plugin package, mirror these root sources into `plugins/codex-autoresearch/skills/codex-autoresearch/`:
+
+- `SKILL.md`
+- `agents/openai.yaml`
+- `scripts/*.py`
+- `references/*.md`
+
+Keep these release surfaces aligned before tagging a user-facing release:
+
+- `plugins/codex-autoresearch/.codex-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
+- `CHANGELOG.md`
+
+Re-run quick validation on the bundled plugin payload before release.

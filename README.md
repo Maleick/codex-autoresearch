@@ -1,5 +1,5 @@
-# Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/openai/codex-autoresearch?style=flat-square&label=release)](https://github.com/openai/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/openai/codex-autoresearch?style=flat-square)](https://github.com/openai/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/openai/codex-autoresearch?style=flat-square)](https://github.com/openai/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/openai/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-> **v1.0.0** — [Issues](https://github.com/openai/codex-autoresearch/issues) Autonomous, metric-driven iteration for Codex.
+# Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/Maleick/codex-autoresearch?style=flat-square&label=release)](https://github.com/Maleick/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/Maleick/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
+> **v1.0.2** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Autonomous, metric-driven iteration for Codex.
 
 Autonomous, metric-driven iteration for Codex.
 
@@ -98,11 +98,13 @@ This repository also includes a local plugin artifact at:
 
 To run the plugin-distribution workflow locally:
 
-1. Keep the plugin payload in sync with repository edits that affect skill behavior.
-2. Run `git push` after edits; the marketplace entry points at `Maleick/codex-autoresearch`, so updates can come from GitHub.
-3. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing changes.
-4. Keep `marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
-5. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
+1. Treat the repo root (`SKILL.md`, `agents/`, `scripts/`, and `references/`) as the source of truth.
+2. Mirror required root-source changes into `plugins/codex-autoresearch/skills/codex-autoresearch/` before release.
+3. Run `git push` after edits; the marketplace entry points at `Maleick/codex-autoresearch`, so updates can come from GitHub.
+4. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing changes.
+5. Update `CHANGELOG.md` with release notes before tagging a user-facing release.
+6. Keep `marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
+7. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
 
@@ -122,3 +124,4 @@ This version is intentionally narrower than the upstream reference:
 - tests focused on artifact semantics instead of end-to-end process orchestration
 
 That keeps the bundle easier to audit and extend while preserving the key behavior: initialize state, log experiments, guide the user through setup, and make deterministic stop-or-continue decisions.
+

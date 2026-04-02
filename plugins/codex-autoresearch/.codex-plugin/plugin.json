@@ -1,10 +1,10 @@
 {
   "name": "codex-autoresearch",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Codex skill bundle for repeatable, metric-driven improvement loops with planning, specialization workflows, and background controls.",
   "author": {
     "name": "Maleick",
-    "email": "opensource@openai.com",
+    "email": "maleick@users.noreply.github.com",
     "url": "https://github.com/Maleick"
   },
   "homepage": "https://github.com/Maleick/codex-autoresearch",
@@ -23,16 +23,16 @@
     "displayName": "Autoresearch",
     "shortDescription": "Run structured improve-verify loops with scoped workflows.",
     "longDescription": "Codex Autoresearch supports iterative, measurable improvements with explicit goals, scoped workflows, and background run controls for larger jobs.",
-    "developerName": "OpenAI",
+    "developerName": "Maleick",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
       "Write",
       "Orchestrate"
     ],
-    "websiteURL": "https://openai.com",
-    "privacyPolicyURL": "https://openai.com/policies/row-privacy-policy/",
-    "termsOfServiceURL": "https://openai.com/policies/row-terms-of-use/",
+    "websiteURL": "https://github.com/Maleick/codex-autoresearch",
+    "privacyPolicyURL": "https://github.com/Maleick/codex-autoresearch/blob/main/README.md",
+    "termsOfServiceURL": "https://github.com/Maleick/codex-autoresearch/blob/main/LICENSE",
     "defaultPrompt": [
       "Run a 10-step hardening pass on this repository using codex-autoresearch.",
       "Use the debug workflow to isolate recurring failures before writing code changes.",

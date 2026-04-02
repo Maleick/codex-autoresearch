@@ -18,6 +18,18 @@ def _load_json(path: Path) -> dict:
     return payload
 
 
+def _relative_files(root: Path, pattern: str) -> list[Path]:
+    return sorted(path.relative_to(root) for path in root.glob(pattern) if path.is_file())
+
+
+def _assert_matching_files(source_root: Path, bundled_root: Path, pattern: str) -> None:
+    source_files = _relative_files(source_root, pattern)
+    bundled_files = _relative_files(bundled_root, pattern)
+    assert source_files == bundled_files
+    for rel_path in source_files:
+        assert (source_root / rel_path).read_bytes() == (bundled_root / rel_path).read_bytes()
+
+
 def test_plugin_manifest_exists_and_is_valid() -> None:
     payload = _load_json(PLUGIN_MANIFEST)
     assert payload["name"] == "codex-autoresearch"
@@ -34,13 +46,27 @@ def test_plugin_skill_payload_is_present() -> None:
     assert PLUGIN_SKILL_ROOT.joinpath("agents", "openai.yaml").exists()
 
 
-def test_plugin_marketplace_entry_points_to_local_path() -> None:
+def test_plugin_skill_payload_mirrors_root_sources() -> None:
+    assert (REPO_ROOT / "SKILL.md").read_bytes() == PLUGIN_SKILL_ROOT.joinpath("SKILL.md").read_bytes()
+    _assert_matching_files(REPO_ROOT / "agents", PLUGIN_SKILL_ROOT / "agents", "*.yaml")
+    _assert_matching_files(REPO_ROOT / "scripts", PLUGIN_SKILL_ROOT / "scripts", "*.py")
+    _assert_matching_files(REPO_ROOT / "references", PLUGIN_SKILL_ROOT / "references", "*.md")
+
+
+def test_plugin_marketplace_entry_points_to_github_source() -> None:
     payload = _load_json(MARKETPLACE_PATH)
     plugins = payload.get("plugins")
     assert isinstance(plugins, list)
-    assert any(
-        entry.get("source", {}).get("path") == "./plugins/codex-autoresearch"
+    entry = next(
+        entry
         for entry in plugins
-        if isinstance(entry, dict)
+        if isinstance(entry, dict) and entry.get("name") == "codex-autoresearch"
     )
-
+    source = entry.get("source")
+    assert isinstance(source, dict)
+    assert source == {
+        "source": "github",
+        "repo": "Maleick/codex-autoresearch",
+        "path": "plugins/codex-autoresearch",
+        "ref": "main",
+    }

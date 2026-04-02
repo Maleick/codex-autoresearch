@@ -27,6 +27,7 @@ RESULTS_HEADER = [
 DEFAULT_RESULTS_PATH = "research-results.tsv"
 DEFAULT_STATE_PATH = "autoresearch-state.json"
 DEFAULT_LAUNCH_PATH = "autoresearch-launch.json"
+ALLOWED_RESULT_STATUSES = {"pass", "fail", "skip"}
 
 
 class AutoresearchError(RuntimeError):
@@ -241,6 +242,15 @@ def normalize_mode(value: str | None) -> str | None:
     return normalized
 
 
+def normalize_result_status(value: str | None, *, field_name: str) -> str:
+    if value is None:
+        raise AutoresearchError(f"Unsupported {field_name}: {value}")
+    normalized = value.strip().lower()
+    if normalized not in ALLOWED_RESULT_STATUSES:
+        raise AutoresearchError(f"Unsupported {field_name}: {value}")
+    return normalized
+
+
 def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, Any]:
     verify = config.verify or infer_verify_command(repo)
     guard = config.guard if config.guard is not None else infer_guard_command(repo, verify)
@@ -444,6 +454,8 @@ def append_iteration(
     metric_decimal = parse_metric(metric_value)
     best_metric = parse_metric(state["metric"]["best"])
     direction = state["metric"]["direction"]
+    verify_status = normalize_result_status(verify_status, field_name="verify_status")
+    guard_status = normalize_result_status(guard_status, field_name="guard_status")
     label_list = labels or []
     now = utc_now()
 
@@ -546,10 +558,17 @@ def write_launch_manifest(
     config: RunConfig,
     results_path_value: str | None,
     state_path_value: str | None,
+    fresh_start: bool = False,
 ) -> dict[str, Any]:
     launch_path = resolve_path(repo, launch_path_value, DEFAULT_LAUNCH_PATH)
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     results_path = resolve_path(repo, results_path_value, DEFAULT_RESULTS_PATH)
+    if launch_path.exists() and not fresh_start:
+        raise AutoresearchError(
+            f"{launch_path} already exists. Use --fresh-start to archive previous artifacts."
+        )
+    if launch_path.exists() and fresh_start:
+        archive_existing(launch_path)
     payload = {
         "schema_version": 1,
         "written_at": utc_now(),
@@ -581,6 +600,8 @@ def set_stop_requested(
 ) -> dict[str, Any]:
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     state = read_json_file(state_path)
+    if state["mode"] != "background":
+        raise AutoresearchError("Only background runs can be stopped with background controls.")
     state["updated_at"] = utc_now()
     state["flags"]["stop_requested"] = True
     state["flags"]["background_active"] = False
@@ -597,6 +618,8 @@ def mark_background_active(
 ) -> dict[str, Any]:
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     state = read_json_file(state_path)
+    if state["mode"] != "background":
+        raise AutoresearchError("Only background runs can be managed with background controls.")
     state["updated_at"] = utc_now()
     state["flags"]["background_active"] = active
     state["status"] = "running" if active else state["status"]
@@ -618,9 +641,9 @@ def resume_background_run(
 
     state["updated_at"] = utc_now()
     state["flags"]["stop_requested"] = False
+    state["flags"]["needs_human"] = False
     state["flags"]["background_active"] = True
-    if state["status"] in {"stopping", "stopped", "initialized"}:
-        state["status"] = "running"
+    state["status"] = "running"
     atomic_write_json(state_path, state)
     return state
 
