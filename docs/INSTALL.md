@@ -62,6 +62,8 @@ When maintaining the GitHub-backed plugin payload, use this workflow:
 
 GitHub-backed installs resolve `plugins/codex-autoresearch` from `Maleick/codex-autoresearch@main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
 
+For machine-local fallback setup when Codex cannot refresh GitHub-backed plugins, see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](LOCAL-FALLBACK-BOOTSTRAP.md).
+
 ## Release Validation
 
 Before shipping the plugin payload, run:

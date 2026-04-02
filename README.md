@@ -109,6 +109,7 @@ If you want hard retention/stop gates, pair that with `--required-keep-labels` a
 Every completed run now also writes `autoresearch-self-improvement.md` and `autoresearch-memory.md`. The next wizard, init, and background launch flow automatically load `autoresearch-memory.md` when it exists, unless you deliberately override it with `--memory-path`.
 For copy/symlink installation details and the release-validation commands, see [docs/INSTALL.md](docs/INSTALL.md).
 Use `scripts/autoresearch_complete_run.py` for foreground runs. `scripts/autoresearch_runtime_ctl.py complete` remains the background-run completion path.
+For machine-local fallback setup when Codex cannot refresh GitHub-backed plugins, see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 
 ## Session Hooks
 
