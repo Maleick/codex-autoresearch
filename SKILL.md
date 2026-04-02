@@ -43,6 +43,10 @@ Strongly recommended:
 - `Guard`
 - `Run Mode` (`foreground` or `background`)
 - `Iteration Cap`
+- `Run Duration` (for unattended runs, for example `5h`)
+- `Required Keep Labels` (for example `verified`)
+- `Required Stop Labels` (for example `ship-ready`)
+- `Memory` (`autoresearch-memory.md`, if present; load it automatically unless the operator overrides the path)
 - `Stop Condition`
 - `Rollback Strategy`
 
@@ -54,10 +58,14 @@ Strongly recommended:
 4. Baseline exactly once at run start.
 5. Make one focused experiment per iteration.
 6. Verify mechanically. Do not retain a change on intuition alone.
-7. Record every completed iteration before the next one starts.
-8. Do not revert unrelated user work.
-9. Treat run artifacts as generated working state, not source files to commit.
-10. If the run gets stuck, change strategy instead of brute-forcing the same idea.
+7. If required keep labels are configured, do not keep an iteration unless those labels are present.
+8. If required stop labels are configured, only treat a retained keep as stop-ready when those labels are present.
+9. For long unattended runs, prefer installing the optional session hooks so resume/start context stays anchored.
+10. Record every completed iteration before the next one starts.
+11. After a completed run, the next wizard/init/launch flow should automatically carry `autoresearch-memory.md` into the next run unless the operator explicitly overrides it.
+12. Do not revert unrelated user work.
+13. Treat run artifacts as generated working state, not source files to commit.
+14. If the run gets stuck, change strategy instead of brute-forcing the same idea.
 
 ## Mode Routing
 
@@ -72,12 +80,18 @@ For planning, prefer `python scripts/autoresearch_wizard.py` to generate the ini
 Use these helpers when managing a detached run:
 
 - `python scripts/autoresearch_runtime_ctl.py launch ...`
+- `python scripts/autoresearch_runtime_ctl.py launch ... --dry-run`
+- `python scripts/autoresearch_runtime_ctl.py launch ... --memory-path autoresearch-memory.md`
 - `python scripts/autoresearch_runtime_ctl.py status`
+- `python scripts/autoresearch_runtime_ctl.py status --report-path autoresearch-report.md`
 - `python scripts/autoresearch_runtime_ctl.py complete`
+- `python scripts/autoresearch_runtime_ctl.py complete --self-improvement-path autoresearch-self-improvement.md --memory-path autoresearch-memory.md`
 - `python scripts/autoresearch_runtime_ctl.py stop`
 - `python scripts/autoresearch_runtime_ctl.py resume`
 
 Use `python scripts/autoresearch_supervisor_status.py` when a supervisor needs a deterministic relaunch decision.
+Use `python scripts/autoresearch_hooks_ctl.py install` if you want SessionStart/Stop hooks to re-anchor overnight or resumed runs.
+Use `python scripts/autoresearch_complete_run.py` to complete a foreground run and write the post-run learning artifacts without a one-off script.
 
 ## Expected Output
 
@@ -95,16 +109,22 @@ This skill bundle does not attempt to prescribe one exact Codex runtime environm
 
 ## Plugin Distribution
 
-This repository also contains a local plugin bundle at `plugins/codex-autoresearch`.
-When shipping the package, keep these in sync:
+Treat the repository root as the source of truth for this skill bundle.
 
-- `SKILL.md` and `agents/openai.yaml` at the plugin skill path
-- `scripts/*.py` used by run orchestration
-- `references/*.md` that define workflow semantics
-- `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`
+When shipping the plugin package, mirror these root sources into `plugins/codex-autoresearch/skills/codex-autoresearch/`:
 
-If you update this repo skill directly, mirror any behavior changes into:
+- `SKILL.md`
+- `agents/openai.yaml`
+- `scripts/*.py`
+- `references/*.md`
 
-`plugins/codex-autoresearch/skills/codex-autoresearch/`
+Keep these release surfaces aligned before tagging a user-facing release:
 
-and re-run quick validation on that skill payload before release.
+- `plugins/codex-autoresearch/.codex-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
+- `CHANGELOG.md`
+
+Re-run quick validation on the bundled plugin payload before release:
+
+- `python scripts/check_plugin_distribution.py`
+- `python -m pytest tests/test_plugin_distribution.py`

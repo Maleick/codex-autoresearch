@@ -3,9 +3,27 @@ from __future__ import annotations
 import argparse
 
 try:
-    from scripts.autoresearch_helpers import AutoresearchError, RunConfig, initialize_run, print_json
+    from scripts.autoresearch_helpers import (
+        AutoresearchError,
+        DEFAULT_LAUNCH_PATH,
+        RunConfig,
+        initialize_run,
+        print_json,
+        resolve_path,
+        resolve_repo,
+    )
+    from scripts.autoresearch_hook_context import update_hook_context_pointer
 except ModuleNotFoundError:
-    from autoresearch_helpers import AutoresearchError, RunConfig, initialize_run, print_json
+    from autoresearch_helpers import (
+        AutoresearchError,
+        DEFAULT_LAUNCH_PATH,
+        RunConfig,
+        initialize_run,
+        print_json,
+        resolve_path,
+        resolve_repo,
+    )
+    from autoresearch_hook_context import update_hook_context_pointer
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", default="foreground", choices=["foreground", "background"], help="Run mode.")
     parser.add_argument("--guard", help="Optional guard command.")
     parser.add_argument("--iterations", type=int, help="Optional iteration cap.")
+    parser.add_argument("--duration", help="Optional wall-clock cap, for example 5h or 300m.")
+    parser.add_argument("--memory-path", help="Optional reusable memory input path. Defaults to autoresearch-memory.md at repo root.")
+    parser.add_argument("--required-keep-labels", nargs="*", help="Labels that must be present before a keep decision is valid.")
+    parser.add_argument("--required-stop-labels", nargs="*", help="Labels that mark a retained keep as stop-ready.")
     parser.add_argument("--run-tag", help="Optional human-readable run tag.")
     parser.add_argument("--stop-condition", help="Optional textual stop condition.")
     parser.add_argument("--baseline", help="Optional baseline metric value.")
@@ -40,6 +62,10 @@ def main() -> int:
         scope=args.scope,
         guard=args.guard,
         iterations=args.iterations,
+        duration=args.duration,
+        memory_path=args.memory_path,
+        required_keep_labels=args.required_keep_labels,
+        required_stop_labels=args.required_stop_labels,
         run_tag=args.run_tag,
         stop_condition=args.stop_condition,
         baseline=args.baseline,
@@ -56,6 +82,18 @@ def main() -> int:
         parser.error(str(exc))
         return 2
 
+    try:
+        update_hook_context_pointer(
+            repo=resolve_repo(args.repo),
+            active=True,
+            session_mode=args.mode,
+            results_path=resolve_path(args.repo, args.results_path, "research-results.tsv"),
+            state_path=resolve_path(args.repo, args.state_path, "autoresearch-state.json"),
+            launch_path=resolve_path(args.repo, None, DEFAULT_LAUNCH_PATH) if args.mode == "background" else None,
+            runtime_path=None,
+        )
+    except Exception:
+        pass
     print_json(payload)
     return 0
 

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -27,6 +28,11 @@ RESULTS_HEADER = [
 DEFAULT_RESULTS_PATH = "research-results.tsv"
 DEFAULT_STATE_PATH = "autoresearch-state.json"
 DEFAULT_LAUNCH_PATH = "autoresearch-launch.json"
+DEFAULT_REPORT_PATH = "autoresearch-report.md"
+DEFAULT_SELF_IMPROVEMENT_PATH = "autoresearch-self-improvement.md"
+DEFAULT_MEMORY_PATH = "autoresearch-memory.md"
+ALLOWED_RESULT_STATUSES = {"pass", "fail", "skip"}
+DURATION_TOKEN_RE = re.compile(r"(\d+)([smhd])")
 
 
 class AutoresearchError(RuntimeError):
@@ -43,6 +49,10 @@ class RunConfig:
     scope: str | None = None
     guard: str | None = None
     iterations: int | None = None
+    duration: str | None = None
+    memory_path: str | None = None
+    required_keep_labels: list[str] | None = None
+    required_stop_labels: list[str] | None = None
     run_tag: str | None = None
     stop_condition: str | None = None
     baseline: str | None = None
@@ -58,6 +68,10 @@ class WizardConfig:
     guard: str | None = None
     mode: str | None = None
     iterations: int | None = None
+    duration: str | None = None
+    memory_path: str | None = None
+    required_keep_labels: list[str] | None = None
+    required_stop_labels: list[str] | None = None
     stop_condition: str | None = None
     rollback_strategy: str | None = None
 
@@ -73,6 +87,10 @@ def normalize_direction(value: str | None) -> str:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_utc_timestamp(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def resolve_repo(repo: str | None) -> Path:
@@ -211,15 +229,18 @@ def validate_iteration_cap(value: int | None) -> int | None:
     return value
 
 
-def complete_background_run(
+def complete_run(
     *,
     repo: str | None,
     state_path_value: str | None,
+    expected_mode: str | None = None,
 ) -> dict[str, Any]:
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     state = read_json_file(state_path)
-    if state["mode"] != "background":
-        raise AutoresearchError("Only background runs can be completed with background controls.")
+    if expected_mode is not None and state["mode"] != expected_mode:
+        raise AutoresearchError(
+            f"Only {expected_mode} runs can be completed with this helper."
+        )
     if state["status"] == "completed":
         return state
 
@@ -228,8 +249,33 @@ def complete_background_run(
     state["flags"]["background_active"] = False
     state["flags"]["needs_human"] = False
     state["flags"]["stop_requested"] = False
+    state["flags"]["stop_ready"] = False
     atomic_write_json(state_path, state)
     return state
+
+
+def complete_background_run(
+    *,
+    repo: str | None,
+    state_path_value: str | None,
+) -> dict[str, Any]:
+    return complete_run(
+        repo=repo,
+        state_path_value=state_path_value,
+        expected_mode="background",
+    )
+
+
+def complete_foreground_run(
+    *,
+    repo: str | None,
+    state_path_value: str | None,
+) -> dict[str, Any]:
+    return complete_run(
+        repo=repo,
+        state_path_value=state_path_value,
+        expected_mode="foreground",
+    )
 
 
 def normalize_mode(value: str | None) -> str | None:
@@ -241,6 +287,94 @@ def normalize_mode(value: str | None) -> str | None:
     return normalized
 
 
+def normalize_result_status(value: str | None, *, field_name: str) -> str:
+    if value is None:
+        raise AutoresearchError(f"Unsupported {field_name}: {value}")
+    normalized = value.strip().lower()
+    if normalized not in ALLOWED_RESULT_STATUSES:
+        raise AutoresearchError(f"Unsupported {field_name}: {value}")
+    return normalized
+
+
+def normalize_labels(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, list):
+        raise AutoresearchError(f"Unsupported labels value: {values!r}")
+    normalized: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            raise AutoresearchError(f"Unsupported label entry: {value!r}")
+        for token in value.split(","):
+            label = token.strip()
+            if label and label not in normalized:
+                normalized.append(label)
+    return normalized
+
+
+def missing_required_labels(labels: list[str], required_labels: list[str]) -> list[str]:
+    label_set = set(labels)
+    return [label for label in required_labels if label not in label_set]
+
+
+def parse_duration_seconds(value: str | None) -> int | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized.isdigit():
+        total = int(normalized)
+        if total <= 0:
+            raise AutoresearchError(f"Invalid duration: {value}")
+        return total
+
+    total = 0
+    position = 0
+    for match in DURATION_TOKEN_RE.finditer(normalized):
+        if match.start() != position:
+            raise AutoresearchError(f"Invalid duration: {value}")
+        amount = int(match.group(1))
+        unit = match.group(2)
+        multiplier = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+        total += amount * multiplier
+        position = match.end()
+
+    if position != len(normalized) or total <= 0:
+        raise AutoresearchError(f"Invalid duration: {value}")
+    return total
+
+
+def load_memory_baseline(repo: str | None, memory_path_value: str | None) -> dict[str, Any]:
+    memory_path = resolve_path(repo, memory_path_value, DEFAULT_MEMORY_PATH)
+    if not memory_path.exists():
+        return {
+            "path": str(memory_path),
+            "loaded": False,
+            "excerpt": None,
+        }
+
+    text = memory_path.read_text(encoding="utf-8").strip()
+    excerpt_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        excerpt_lines.append(stripped)
+        if len(excerpt_lines) == 3:
+            break
+    excerpt = " ".join(excerpt_lines)
+    if len(excerpt) > 280:
+        excerpt = excerpt[:277].rstrip() + "..."
+    return {
+        "path": str(memory_path),
+        "loaded": True,
+        "excerpt": excerpt or None,
+    }
+
+
 def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, Any]:
     verify = config.verify or infer_verify_command(repo)
     guard = config.guard if config.guard is not None else infer_guard_command(repo, verify)
@@ -248,11 +382,22 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
         guard = None
     direction = normalize_direction(config.direction)
     mode = normalize_mode(config.mode)
-    stop_condition = config.stop_condition or (
-        f"stop when `{verify}` reaches the target metric"
+    duration_seconds = parse_duration_seconds(config.duration)
+    required_keep_labels = normalize_labels(config.required_keep_labels)
+    required_stop_labels = normalize_labels(config.required_stop_labels)
+    memory = load_memory_baseline(repo, config.memory_path)
+    stop_reasons = [
+        f"`{verify}` reaches the target metric"
         if verify and verify != "<set verify command>"
-        else "stop when the target metric is met"
-    )
+        else "the target metric is met"
+    ]
+    if config.iterations is not None:
+        stop_reasons.append(f"{config.iterations} iterations complete")
+    if config.duration:
+        stop_reasons.append(f"{config.duration} elapses")
+    if required_stop_labels:
+        stop_reasons.append(f"the retained keep includes labels {', '.join(required_stop_labels)}")
+    stop_condition = config.stop_condition or f"stop when {' or '.join(stop_reasons)}"
     rollback_strategy = config.rollback_strategy or "discard the current experiment and keep the last verified state"
     metric = config.metric or "primary verify metric"
     scope = infer_scope(repo, config.scope)
@@ -316,6 +461,14 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
                 "reason": "The skill requires an explicit run-mode choice before launch.",
             }
         )
+    if config.mode == "background" and not config.duration:
+        questions.append(
+            {
+                "id": "duration",
+                "prompt": "How long should the background run be allowed to continue? Example: `5h` or `300m`.",
+                "reason": "An unattended run should have an explicit wall-clock cap.",
+            }
+        )
 
     return {
         "goal": config.goal,
@@ -326,6 +479,11 @@ def build_setup_summary(*, repo: str | None, config: WizardConfig) -> dict[str, 
         "guard": guard,
         "mode": mode,
         "iterations_cap": config.iterations,
+        "duration": config.duration,
+        "duration_seconds": duration_seconds,
+        "memory": memory,
+        "required_keep_labels": required_keep_labels,
+        "required_stop_labels": required_stop_labels,
         "stop_condition": stop_condition,
         "rollback_strategy": rollback_strategy,
         "missing_required": missing_required,
@@ -343,10 +501,25 @@ def metric_is_better(candidate: Decimal, current: Decimal | None, direction: str
     raise AutoresearchError(f"Unsupported direction: {direction}")
 
 
-def make_state_payload(config: RunConfig, results_path: Path, state_path: Path) -> dict[str, Any]:
+def make_state_payload(
+    config: RunConfig,
+    results_path: Path,
+    state_path: Path,
+    *,
+    repo: str | None = None,
+) -> dict[str, Any]:
     direction = normalize_direction(config.direction)
     baseline_metric = parse_metric(config.baseline)
     now = utc_now()
+    duration_seconds = parse_duration_seconds(config.duration)
+    required_keep_labels = normalize_labels(config.required_keep_labels)
+    required_stop_labels = normalize_labels(config.required_stop_labels)
+    memory = load_memory_baseline(repo, config.memory_path)
+    deadline_at = (
+        (parse_utc_timestamp(now) + timedelta(seconds=duration_seconds)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        if duration_seconds is not None
+        else None
+    )
     run_id = config.run_tag or f"run-{uuid4().hex[:10]}"
     return {
         "schema_version": 1,
@@ -367,6 +540,14 @@ def make_state_payload(config: RunConfig, results_path: Path, state_path: Path) 
         "verify": config.verify,
         "guard": config.guard,
         "iterations_cap": config.iterations,
+        "duration": config.duration,
+        "duration_seconds": duration_seconds,
+        "deadline_at": deadline_at,
+        "memory": memory,
+        "label_requirements": {
+            "keep": required_keep_labels,
+            "stop": required_stop_labels,
+        },
         "stop_condition": config.stop_condition,
         "artifact_paths": {
             "results": str(results_path),
@@ -384,6 +565,7 @@ def make_state_payload(config: RunConfig, results_path: Path, state_path: Path) 
             "stop_requested": False,
             "needs_human": False,
             "background_active": config.mode == "background",
+            "stop_ready": False,
         },
         "last_iteration": None,
     }
@@ -414,7 +596,7 @@ def initialize_run(
                 archived[path.name] = str(archived_path)
 
     write_results_header(results_path)
-    state = make_state_payload(config, results_path, state_path)
+    state = make_state_payload(config, results_path, state_path, repo=repo)
     if archived:
         state["archived_previous"] = archived
     atomic_write_json(state_path, state)
@@ -444,7 +626,18 @@ def append_iteration(
     metric_decimal = parse_metric(metric_value)
     best_metric = parse_metric(state["metric"]["best"])
     direction = state["metric"]["direction"]
-    label_list = labels or []
+    verify_status = normalize_result_status(verify_status, field_name="verify_status")
+    guard_status = normalize_result_status(guard_status, field_name="guard_status")
+    label_list = normalize_labels(labels)
+    label_requirements = state.get("label_requirements", {})
+    required_keep_labels = normalize_labels(label_requirements.get("keep"))
+    required_stop_labels = normalize_labels(label_requirements.get("stop"))
+    missing_keep_labels = missing_required_labels(label_list, required_keep_labels)
+    missing_stop_labels = missing_required_labels(label_list, required_stop_labels)
+    keep_labels_satisfied = not missing_keep_labels
+    stop_labels_satisfied = not missing_stop_labels
+    if decision == "keep" and missing_keep_labels:
+        raise AutoresearchError("Keep decision requires labels: " + ", ".join(missing_keep_labels))
     now = utc_now()
 
     row = {
@@ -465,6 +658,7 @@ def append_iteration(
     state["status"] = "running"
     state["stats"]["total_iterations"] = current_iteration
     state["metric"]["latest"] = decimal_to_json(metric_decimal)
+    state["flags"]["stop_ready"] = decision == "keep" and stop_labels_satisfied
 
     if decision == "keep":
         state["stats"]["kept"] += 1
@@ -489,6 +683,10 @@ def append_iteration(
         "change_summary": change_summary,
         "labels": label_list,
         "timestamp": now,
+        "keep_labels_satisfied": keep_labels_satisfied,
+        "stop_labels_satisfied": stop_labels_satisfied,
+        "missing_keep_labels": missing_keep_labels,
+        "missing_stop_labels": missing_stop_labels,
     }
 
     atomic_write_json(state_path, state)
@@ -515,6 +713,9 @@ def build_supervisor_snapshot(
     elif state["flags"]["needs_human"]:
         decision = "needs_human"
         reason = "human_input_required"
+    elif state.get("deadline_at") and parse_utc_timestamp(utc_now()) >= parse_utc_timestamp(state["deadline_at"]):
+        decision = "stop"
+        reason = "duration_elapsed"
     elif state.get("iterations_cap") is not None and state["stats"]["total_iterations"] >= state["iterations_cap"]:
         decision = "stop"
         reason = "iteration_cap_reached"
@@ -535,11 +736,12 @@ def build_supervisor_snapshot(
         "results_rows": len(rows),
         "artifact_paths": state["artifact_paths"],
         "flags": state["flags"],
+        "label_requirements": state.get("label_requirements", {"keep": [], "stop": []}),
     }
     return snapshot
 
 
-def write_launch_manifest(
+def build_launch_manifest_payload(
     *,
     repo: str | None,
     launch_path_value: str | None,
@@ -550,7 +752,7 @@ def write_launch_manifest(
     launch_path = resolve_path(repo, launch_path_value, DEFAULT_LAUNCH_PATH)
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     results_path = resolve_path(repo, results_path_value, DEFAULT_RESULTS_PATH)
-    payload = {
+    return {
         "schema_version": 1,
         "written_at": utc_now(),
         "repo": str(resolve_repo(repo)),
@@ -562,6 +764,11 @@ def write_launch_manifest(
         "verify": config.verify,
         "guard": config.guard,
         "iterations_cap": config.iterations,
+        "duration": config.duration,
+        "duration_seconds": parse_duration_seconds(config.duration),
+        "memory": load_memory_baseline(repo, config.memory_path),
+        "required_keep_labels": normalize_labels(config.required_keep_labels),
+        "required_stop_labels": normalize_labels(config.required_stop_labels),
         "stop_condition": config.stop_condition,
         "run_tag": config.run_tag,
         "artifact_paths": {
@@ -570,6 +777,31 @@ def write_launch_manifest(
             "launch": str(launch_path),
         },
     }
+
+
+def write_launch_manifest(
+    *,
+    repo: str | None,
+    launch_path_value: str | None,
+    config: RunConfig,
+    results_path_value: str | None,
+    state_path_value: str | None,
+    fresh_start: bool = False,
+) -> dict[str, Any]:
+    launch_path = resolve_path(repo, launch_path_value, DEFAULT_LAUNCH_PATH)
+    if launch_path.exists() and not fresh_start:
+        raise AutoresearchError(
+            f"{launch_path} already exists. Use --fresh-start to archive previous artifacts."
+        )
+    if launch_path.exists() and fresh_start:
+        archive_existing(launch_path)
+    payload = build_launch_manifest_payload(
+        repo=repo,
+        launch_path_value=launch_path_value,
+        config=config,
+        results_path_value=results_path_value,
+        state_path_value=state_path_value,
+    )
     atomic_write_json(launch_path, payload)
     return payload
 
@@ -581,6 +813,8 @@ def set_stop_requested(
 ) -> dict[str, Any]:
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     state = read_json_file(state_path)
+    if state["mode"] != "background":
+        raise AutoresearchError("Only background runs can be stopped with background controls.")
     state["updated_at"] = utc_now()
     state["flags"]["stop_requested"] = True
     state["flags"]["background_active"] = False
@@ -597,6 +831,8 @@ def mark_background_active(
 ) -> dict[str, Any]:
     state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
     state = read_json_file(state_path)
+    if state["mode"] != "background":
+        raise AutoresearchError("Only background runs can be managed with background controls.")
     state["updated_at"] = utc_now()
     state["flags"]["background_active"] = active
     state["status"] = "running" if active else state["status"]
@@ -618,11 +854,332 @@ def resume_background_run(
 
     state["updated_at"] = utc_now()
     state["flags"]["stop_requested"] = False
+    state["flags"]["needs_human"] = False
     state["flags"]["background_active"] = True
-    if state["status"] in {"stopping", "stopped", "initialized"}:
-        state["status"] = "running"
+    state["status"] = "running"
     atomic_write_json(state_path, state)
     return state
+
+
+def build_run_report(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+) -> str:
+    state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
+    state = read_json_file(state_path)
+    rows = read_results_rows(resolve_path(repo, results_path_value, DEFAULT_RESULTS_PATH))
+    label_requirements = state.get("label_requirements", {"keep": [], "stop": []})
+    last_iteration = state.get("last_iteration") or {}
+    memory = state.get("memory") or {"path": None, "loaded": False, "excerpt": None}
+    lines = [
+        "# Autoresearch Report",
+        "",
+        f"- Run ID: `{state['run_id']}`",
+        f"- Status: `{state['status']}`",
+        f"- Mode: `{state['mode']}`",
+        f"- Goal: {state['goal']}",
+        f"- Metric: `{state['metric']['name']}` ({state['metric']['direction']})",
+        f"- Best metric: `{state['metric']['best']}`",
+        f"- Latest metric: `{state['metric']['latest']}`",
+        f"- Iterations: `{state['stats']['total_iterations']}`",
+        f"- Kept: `{state['stats']['kept']}`",
+        f"- Discarded: `{state['stats']['discarded']}`",
+        f"- Needs human: `{state['stats']['needs_human']}`",
+        f"- Iteration cap: `{state.get('iterations_cap')}`",
+        f"- Duration: `{state.get('duration')}`",
+        f"- Deadline: `{state.get('deadline_at')}`",
+        f"- Memory loaded: `{memory.get('loaded')}`",
+        f"- Memory path: `{memory.get('path')}`",
+        f"- Memory excerpt: {memory.get('excerpt') or 'none'}",
+        f"- Stop ready: `{state['flags'].get('stop_ready')}`",
+        "",
+        "## Label gates",
+        "",
+        f"- Required keep labels: `{', '.join(label_requirements.get('keep', [])) or 'none'}`",
+        f"- Required stop labels: `{', '.join(label_requirements.get('stop', [])) or 'none'}`",
+        "",
+        "## Last iteration",
+        "",
+        f"- Iteration: `{last_iteration.get('iteration')}`",
+        f"- Decision: `{last_iteration.get('decision')}`",
+        f"- Labels: `{', '.join(last_iteration.get('labels', [])) or 'none'}`",
+        f"- Keep labels satisfied: `{last_iteration.get('keep_labels_satisfied')}`",
+        f"- Stop labels satisfied: `{last_iteration.get('stop_labels_satisfied')}`",
+        f"- Missing keep labels: `{', '.join(last_iteration.get('missing_keep_labels', [])) or 'none'}`",
+        f"- Missing stop labels: `{', '.join(last_iteration.get('missing_stop_labels', [])) or 'none'}`",
+        f"- Change summary: {last_iteration.get('change_summary')}",
+        "",
+        "## Recent iterations",
+        "",
+        "| Iteration | Decision | Metric | Labels | Summary |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for row in rows[-5:]:
+        lines.append(
+            f"| {row.get('iteration', '')} | {row.get('decision', '')} | {row.get('metric_value', '')} | "
+            f"{row.get('labels', '') or 'none'} | {row.get('change_summary', '')} |"
+        )
+    if not rows:
+        lines.append("| none | none | none | none | no iterations recorded yet |")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_run_report(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+    report_path_value: str | None,
+) -> Path:
+    report_path = resolve_path(repo, report_path_value, DEFAULT_REPORT_PATH)
+    atomic_write_text(
+        report_path,
+        build_run_report(
+            repo=repo,
+            results_path_value=results_path_value,
+            state_path_value=state_path_value,
+        ),
+    )
+    return report_path
+
+
+def build_self_improvement_payload(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+) -> dict[str, Any]:
+    state_path = resolve_path(repo, state_path_value, DEFAULT_STATE_PATH)
+    state = read_json_file(state_path)
+    rows = read_results_rows(resolve_path(repo, results_path_value, DEFAULT_RESULTS_PATH))
+    last_iteration = state.get("last_iteration") or {}
+    latest_row = rows[-1] if rows else {}
+    label_requirements = state.get("label_requirements") or {"keep": [], "stop": []}
+    memory = state.get("memory") or {"path": None, "loaded": False, "excerpt": None}
+
+    keep_recommendations: list[str] = []
+    change_recommendations: list[str] = []
+    next_run_defaults: list[str] = []
+
+    decision = last_iteration.get("decision")
+    verify_status = latest_row.get("verify_status")
+    guard_status = latest_row.get("guard_status")
+    required_keep_labels = label_requirements.get("keep", [])
+    required_stop_labels = label_requirements.get("stop", [])
+    missing_keep_labels = last_iteration.get("missing_keep_labels") or []
+    missing_stop_labels = last_iteration.get("missing_stop_labels") or []
+
+    if decision == "keep":
+        keep_recommendations.append(
+            "Keep the current direction of change; the latest iteration was retained."
+        )
+    elif decision:
+        change_recommendations.append(
+            "Require a clearer improvement delta before retaining the next iteration."
+        )
+
+    if verify_status == "pass":
+        keep_recommendations.append(
+            "Keep the current verify command shape; it passed on the latest recorded iteration."
+        )
+    elif verify_status == "fail":
+        change_recommendations.append(
+            "Tighten or simplify the verify command before the next unattended run."
+        )
+    elif verify_status == "skip":
+        change_recommendations.append(
+            "Avoid skipped verification on the next run; make the verify step mechanically executable."
+        )
+
+    if guard_status == "pass":
+        keep_recommendations.append(
+            "Keep the current guard command or review gate; it passed on the latest recorded iteration."
+        )
+    elif guard_status == "fail":
+        change_recommendations.append(
+            "Strengthen the guard command or narrow the run scope before the next unattended run."
+        )
+    elif guard_status == "skip" and state.get("guard"):
+        change_recommendations.append(
+            "Do not skip the configured guard command on the next unattended run."
+        )
+
+    if required_keep_labels:
+        if missing_keep_labels:
+            change_recommendations.append(
+                "Do not retain future iterations until these keep labels are recorded: "
+                + ", ".join(missing_keep_labels)
+                + "."
+            )
+        else:
+            keep_recommendations.append(
+                "Carry forward the required keep labels: "
+                + ", ".join(required_keep_labels)
+                + "."
+            )
+
+    if required_stop_labels:
+        if missing_stop_labels:
+            change_recommendations.append(
+                "Do not treat the run as stop-ready until these stop labels are recorded: "
+                + ", ".join(missing_stop_labels)
+                + "."
+            )
+        else:
+            keep_recommendations.append(
+                "Carry forward the required stop labels: "
+                + ", ".join(required_stop_labels)
+                + "."
+            )
+
+    if state["stats"]["needs_human"] > 0:
+        change_recommendations.append(
+            "Add an earlier escalation checkpoint or reduce scope before the next unattended run."
+        )
+
+    if state["stats"]["discarded"] > state["stats"]["kept"]:
+        change_recommendations.append(
+            "Reduce the next run's scope or shorten the experiment loop; this run discarded more iterations than it kept."
+        )
+
+    if state.get("iterations_cap") is not None:
+        next_run_defaults.append(f"Iterations cap: {state['iterations_cap']}")
+    if state.get("duration"):
+        next_run_defaults.append(f"Duration budget: {state['duration']}")
+    if required_keep_labels:
+        next_run_defaults.append("Required keep labels: " + ", ".join(required_keep_labels))
+    if required_stop_labels:
+        next_run_defaults.append("Required stop labels: " + ", ".join(required_stop_labels))
+    if state.get("verify"):
+        next_run_defaults.append(f"Verify command: {state['verify']}")
+    if state.get("guard"):
+        next_run_defaults.append(f"Guard command: {state['guard']}")
+    if memory.get("loaded") and memory.get("path"):
+        next_run_defaults.append(f"Memory baseline: {memory['path']}")
+
+    summary = (
+        f"Run `{state['run_id']}` completed after `{state['stats']['total_iterations']}` iterations. "
+        "Use these learned defaults as the starting baseline for the next autoresearch cycle."
+    )
+    return {
+        "run_id": state["run_id"],
+        "summary": summary,
+        "keep_recommendations": keep_recommendations,
+        "change_recommendations": change_recommendations,
+        "next_run_defaults": next_run_defaults,
+    }
+
+
+def build_self_improvement_report(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+) -> str:
+    payload = build_self_improvement_payload(
+        repo=repo,
+        results_path_value=results_path_value,
+        state_path_value=state_path_value,
+    )
+    lines = [
+        "# Autoresearch Self-Improvement",
+        "",
+        payload["summary"],
+        "",
+        "## Keep",
+    ]
+    if payload["keep_recommendations"]:
+        lines.extend(f"- {item}" for item in payload["keep_recommendations"])
+    else:
+        lines.append("- No keep recommendations were extracted from the latest run.")
+    lines.extend(["", "## Change"])
+    if payload["change_recommendations"]:
+        lines.extend(f"- {item}" for item in payload["change_recommendations"])
+    else:
+        lines.append("- No change recommendations were extracted from the latest run.")
+    lines.extend(["", "## Recommended next run defaults"])
+    if payload["next_run_defaults"]:
+        lines.extend(f"- {item}" for item in payload["next_run_defaults"])
+    else:
+        lines.append("- No next-run defaults were recorded.")
+    lines.extend(
+        [
+            "",
+            "## Reuse rule",
+            "- Load `autoresearch-memory.md` before the next run and treat it as the default baseline.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def build_memory_file(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+) -> str:
+    payload = build_self_improvement_payload(
+        repo=repo,
+        results_path_value=results_path_value,
+        state_path_value=state_path_value,
+    )
+    lines = [
+        "# Autoresearch Memory",
+        "",
+        "Carry these learnings into the next run unless the operator overrides them.",
+        "",
+        "## Keep",
+    ]
+    if payload["keep_recommendations"]:
+        lines.extend(f"- {item}" for item in payload["keep_recommendations"])
+    else:
+        lines.append("- No keep recommendations were extracted from the latest run.")
+    lines.extend(["", "## Change"])
+    if payload["change_recommendations"]:
+        lines.extend(f"- {item}" for item in payload["change_recommendations"])
+    else:
+        lines.append("- No change recommendations were extracted from the latest run.")
+    lines.extend(["", "## Defaults"])
+    if payload["next_run_defaults"]:
+        lines.extend(f"- {item}" for item in payload["next_run_defaults"])
+    else:
+        lines.append("- No next-run defaults were recorded.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_self_improvement_artifacts(
+    *,
+    repo: str | None,
+    results_path_value: str | None,
+    state_path_value: str | None,
+    self_improvement_path_value: str | None,
+    memory_path_value: str | None,
+) -> tuple[Path, Path]:
+    self_improvement_path = resolve_path(
+        repo, self_improvement_path_value, DEFAULT_SELF_IMPROVEMENT_PATH
+    )
+    atomic_write_text(
+        self_improvement_path,
+        build_self_improvement_report(
+            repo=repo,
+            results_path_value=results_path_value,
+            state_path_value=state_path_value,
+        ),
+    )
+    memory_path = resolve_path(repo, memory_path_value, DEFAULT_MEMORY_PATH)
+    atomic_write_text(
+        memory_path,
+        build_memory_file(
+            repo=repo,
+            results_path_value=results_path_value,
+            state_path_value=state_path_value,
+        ),
+    )
+    return self_improvement_path, memory_path
 
 
 def print_json(payload: dict[str, Any]) -> None:
