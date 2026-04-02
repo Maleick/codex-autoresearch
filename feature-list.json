@@ -53,5 +53,16 @@
       "Contributor documentation defines the edit, sync, validate, and push workflow for updates that should reach GitHub-backed plugin installs"
     ],
     "notes": "Added scripts/sync_plugin_payload.py, a plugin-distribution GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
+  },
+  {
+    "id": "local_plugin_fallback_bootstrap",
+    "name": "Local plugin fallback bootstrap for machine-local marketplace",
+    "status": "complete",
+    "acceptance_tests": [
+      "Helper script can sync the plugin payload, copy it to a local plugins directory, and merge its entry into a local marketplace manifest",
+      "Bootstrapped marketplace identifier correctly matches the enabled-plugin reference",
+      "Existing marketplace entries for unrelated plugins are preserved during bootstrap"
+    ],
+    "notes": "Added scripts/bootstrap_local_plugin.py and docs/LOCAL-FALLBACK-BOOTSTRAP.md to handle machine-local Codex plugin discovery when GitHub sync fails."
   }
 ]
