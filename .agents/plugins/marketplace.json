@@ -7,8 +7,10 @@
     {
       "name": "codex-autoresearch",
       "source": {
-        "source": "local",
-        "path": "./plugins/codex-autoresearch"
+        "source": "github",
+        "repo": "Maleick/codex-autoresearch",
+        "path": "plugins/codex-autoresearch",
+        "ref": "main"
       },
       "policy": {
         "installation": "AVAILABLE",

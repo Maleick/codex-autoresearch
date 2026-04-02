@@ -99,8 +99,12 @@ This repository also includes a local plugin artifact at:
 To run the plugin-distribution workflow locally:
 
 1. Keep the plugin payload in sync with repository edits that affect skill behavior.
-2. Run the marketplace manifest through `marketplace.json` and keep plugin policy values aligned with desired install behavior.
-3. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
+2. Run `git push` after edits; the marketplace entry points at `Maleick/codex-autoresearch`, so updates can come from GitHub.
+3. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing changes.
+4. Keep `marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
+5. Add release-ready assets under `plugins/codex-autoresearch/assets` when you want screenshots or icons.
+
+To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
 
 For a fresh plugin creation, use the scaffold script:
 
