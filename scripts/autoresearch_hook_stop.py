@@ -4,24 +4,27 @@ import json
 import subprocess
 import sys
 
-from autoresearch_hook_context import update_hook_context_pointer
-from autoresearch_hook_common import build_context
+try:
+    from scripts.autoresearch_hook_context import update_hook_context_pointer
+    from scripts.autoresearch_hook_common import build_context
+except ModuleNotFoundError:
+    from autoresearch_hook_context import update_hook_context_pointer
+    from autoresearch_hook_common import build_context
 
 
 NONTERMINAL_DECISIONS = {"relaunch"}
 CONTINUATION_PROMPT = (
     "Continue the current autoresearch run.\n"
     "Do not rerun the wizard.\n"
-    "The run was already approved; keep going unless the user stops it or a real needs_human blocker appears.\n"
+    "Re-anchor the standing subagent pool before the next handoff.\n"
     "If you just completed an experiment, record it before starting the next one.\n"
-    "Re-anchor the standing subagent pool before the next code change.\n"
-    "Honor keep/stop label gates, iteration limits, and duration limits before stopping."
+    "Honor keep/stop label gates, iteration limits, and duration limits before stopping.\n"
+    "After launch approval, keep going unless the user stops the run or a real needs_human blocker appears."
 )
 FOLLOWUP_CONTINUATION_PROMPT = (
     "Continue the current autoresearch run.\n"
     "You are already inside a stop-hook continuation.\n"
-    "Do not stop yet; if you just completed an experiment, record it before the next one.\n"
-    "Keep the standing subagent pool aligned with the latest state before you continue."
+    "Do not stop yet; re-anchor the standing subagent pool and record the last experiment before the next one."
 )
 
 

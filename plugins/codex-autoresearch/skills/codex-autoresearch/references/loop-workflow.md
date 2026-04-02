@@ -30,4 +30,6 @@ Stop when:
 - the iteration cap is reached
 - the run genuinely needs human input
 
+Once the user approves launch, continue by default until one of those stop conditions is true. Do not restart the approval cycle on every pass; re-anchor the same standing pool and keep iterating.
+
 Background supervisors should use `scripts/autoresearch_supervisor_status.py` to make the relaunch decision from the same artifacts.

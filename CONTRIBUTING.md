@@ -73,4 +73,21 @@ When changing the workflow surface or release process, update:
 - `plugins/codex-autoresearch/README.md`
 - `CHANGELOG.md` for user-facing release notes
 
+Keep those docs aligned on the subagent-first model, the plan helper, continuation behavior, and validation expectations.
+
+## Subagent-First Contract
+
+When you change the standing-pool behavior, keep these surfaces aligned:
+
+- `SKILL.md`
+- `agents/openai.yaml`
+- `references/subagent-orchestration.md`
+- `references/interaction-wizard.md`
+- `references/loop-workflow.md`
+- `plugins/codex-autoresearch/.codex-plugin/plugin.json`
+- `tests/test_autoresearch_helpers.py`
+- `tests/test_autoresearch_hooks.py`
+- `tests/test_skill_contract.py`
+- `feature-list.json`
+
 Keep the documentation honest about what is implemented today. Do not advertise plugin assets, workflows, or release steps that are not present in the repository.

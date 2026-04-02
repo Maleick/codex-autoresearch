@@ -11,6 +11,13 @@ from typing import Any
 
 ROLE_LIMIT = 6
 WHITESPACE_RE = re.compile(r"\s+")
+RESOURCE_TIERS: dict[str, tuple[str, ...]] = {
+    "lite": ("orchestrator", "scout", "verifier"),
+    "balanced": ("orchestrator", "scout", "analyst", "verifier"),
+    "full": ("orchestrator", "scout", "analyst", "verifier", "synthesizer"),
+}
+
+
 class SubagentPlanError(RuntimeError):
     pass
 
@@ -106,6 +113,51 @@ def choose_special_role(goal: str, scope: str | None, mode: str) -> RoleTemplate
     return None
 
 
+def choose_resource_tier(
+    goal: str,
+    scope: str | None,
+    mode: str,
+    special_role: RoleTemplate | None,
+) -> tuple[str, str]:
+    combined = " ".join(part for part in (goal, scope or "", mode) if part)
+    token_count = len(combined.split())
+    if mode == "background":
+        return (
+            "full",
+            "Background runs benefit from a standing pool that stays aligned across setup, iteration, and resume.",
+        )
+    if special_role is not None:
+        return (
+            "full",
+            f"Goal and scope need {special_role.name.lower()} coverage, so keep the full standing pool active.",
+        )
+    if token_count <= 8 and scope is None:
+        return (
+            "lite",
+            "Short, narrow work can start with a smaller standing pool while keeping the same orchestrator contract.",
+        )
+    if token_count <= 20:
+        return (
+            "balanced",
+            "Moderate work benefits from scout, analyst, and verifier coverage without maxing out the pool.",
+        )
+    return (
+        "full",
+        "Broader or more ambiguous work benefits from the full standing pool from the start.",
+    )
+
+
+def build_active_role_ids(
+    *,
+    resource_tier: str,
+    special_role: RoleTemplate | None,
+) -> list[str]:
+    active_role_ids = list(RESOURCE_TIERS[resource_tier])
+    if special_role is not None and special_role.role_id not in active_role_ids:
+        active_role_ids.append(special_role.role_id)
+    return active_role_ids[:ROLE_LIMIT]
+
+
 def build_pool_key(goal: str, scope: str | None, mode: str, role_ids: list[str]) -> str:
     payload = {
         "goal": goal,
@@ -119,11 +171,57 @@ def build_pool_key(goal: str, scope: str | None, mode: str, role_ids: list[str])
     return f"autoresearch-pool-{digest}"
 
 
-def template_to_role(template: RoleTemplate) -> dict[str, str]:
+def build_role_handoff_prompt(
+    *,
+    template: RoleTemplate,
+    goal: str,
+    scope: str | None,
+    mode: str,
+) -> str:
+    scope_text = scope or "current repository"
+    return (
+        f"You are the {template.name}. Focus: {template.focus} "
+        f"Goal: {goal}. Scope: {scope_text}. Mode: {mode}. "
+        "Do not mutate autoresearch state. Return evidence, risks, and one next-step recommendation."
+    )
+
+
+def build_reanchor_checklist() -> list[str]:
+    return [
+        "Restate the goal, scope, metric, and verify command before the next handoff.",
+        "Summarize the latest kept or discarded iteration before asking the pool for more work.",
+        "Reuse the current role ownership unless drift, timeout, or repeated discards force a reset.",
+        "Ask non-orchestrator roles for evidence, objections, verification, and one next-step recommendation.",
+    ]
+
+
+def build_handoff_contract() -> list[str]:
+    return [
+        "Only the orchestrator records iterations or mutates autoresearch-state.json.",
+        "Non-orchestrator roles return evidence, objections, verification results, and concise recommendations.",
+        "Keep the pool stable across iterations; replace or drop roles only when they stop adding value.",
+    ]
+
+
+def template_to_role(
+    *,
+    template: RoleTemplate,
+    goal: str,
+    scope: str | None,
+    mode: str,
+    active_role_ids: list[str],
+) -> dict[str, Any]:
     return {
         "id": template.role_id,
         "name": template.name,
         "focus": template.focus,
+        "active_by_default": template.role_id in active_role_ids,
+        "handoff_prompt": build_role_handoff_prompt(
+            template=template,
+            goal=goal,
+            scope=scope,
+            mode=mode,
+        ),
     }
 
 
@@ -137,12 +235,31 @@ def build_subagent_pool_plan(
     normalized_scope = normalize_text(scope)
     normalized_mode = normalize_mode(mode)
 
-    roles = [template_to_role(template) for template in BASE_ROLE_TEMPLATES]
     special_role = choose_special_role(normalized_goal, normalized_scope, normalized_mode)
-    if special_role is not None:
-        roles.append(template_to_role(special_role))
+    resource_tier, activation_reason = choose_resource_tier(
+        normalized_goal,
+        normalized_scope,
+        normalized_mode,
+        special_role,
+    )
+    active_role_ids = build_active_role_ids(
+        resource_tier=resource_tier,
+        special_role=special_role,
+    )
 
-    roles = roles[:ROLE_LIMIT]
+    templates = list(BASE_ROLE_TEMPLATES)
+    if special_role is not None:
+        templates.append(special_role)
+    roles = [
+        template_to_role(
+            template=template,
+            goal=normalized_goal,
+            scope=normalized_scope,
+            mode=normalized_mode,
+            active_role_ids=active_role_ids,
+        )
+        for template in templates[:ROLE_LIMIT]
+    ]
     pool_key = build_pool_key(
         normalized_goal,
         normalized_scope,
@@ -160,6 +277,16 @@ def build_subagent_pool_plan(
         "orchestrator_role_id": "orchestrator",
         "state_owner": "orchestrator",
         "fallback_mode": "serial",
+        "resource_tier": resource_tier,
+        "recommended_active_role_ids": active_role_ids,
+        "activation": {
+            "during_setup": resource_tier != "lite",
+            "during_iterations": True,
+            "during_resume": True,
+            "reason": activation_reason,
+        },
+        "handoff_contract": build_handoff_contract(),
+        "reanchor_checklist": build_reanchor_checklist(),
         "goal": normalized_goal,
         "scope": normalized_scope,
         "mode": normalized_mode,

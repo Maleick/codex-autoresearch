@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoresearch_hook_context import load_hook_context_pointer
+try:
+    from scripts.autoresearch_hook_context import load_hook_context_pointer
+except ModuleNotFoundError:
+    from autoresearch_hook_context import load_hook_context_pointer
 
 
 RESULTS_HEADER_PREFIX = "timestamp\titeration\tdecision\t"

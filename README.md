@@ -1,11 +1,13 @@
 # Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/Maleick/codex-autoresearch?style=flat-square&label=release)](https://github.com/Maleick/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/Maleick/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-> **v1.0.3** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Autonomous, metric-driven iteration for Codex.
+> **v1.0.3** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Subagent-first, metric-driven iteration for Codex.
 
-Autonomous, metric-driven iteration for Codex.
+Subagent-first, metric-driven iteration for Codex.
 
 This repository is an original implementation inspired by the workflow shape of `leo-lilinxiao/codex-autoresearch`: scan a repo, define a measurable target, make one controlled change, verify it mechanically, keep or discard it, and repeat. The goal here is a smaller and easier-to-understand bundle that still gives Codex a real operating protocol and concrete helper scripts.
 
-It now also includes a guided planning wizard and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
+It now also includes a plan helper, expressed here as a guided planning wizard, a standing subagent-pool contract, and a compact workflow pack for `plan`, `debug`, `fix`, `learn`, `predict`, `scenario`, `security`, and `ship` style requests, borrowing ideas from `Maleick/claude-autoresearch` without copying that plugin structure directly.
+
+Autoresearch is subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available across iterations, delegates focused work, and folds the results back into the loop.
 
 Autoresearch is now subagent-first: the main agent stays in the orchestrator role, keeps a standing pool of subagents available, delegates focused work, and merges the results back into the loop. The approval boundary stays in setup; after launch, the orchestrator keeps the loop moving until you stop it, the configured stop condition is met, or a real blocker requires human input.
 
@@ -27,14 +29,15 @@ The current release also adds managed session hooks, a foreground completion hel
 The loop is deliberately simple:
 
 1. Infer a goal and metric from the repo and the user's request.
-2. Use the wizard when the setup is incomplete.
+2. Use the wizard when the setup is incomplete and summarize the standing pool plan.
 3. Confirm missing assumptions before launching a new interactive run.
 4. Establish a baseline.
-5. Make one focused experiment.
-6. Verify progress and run a guard if needed.
-7. Retain or discard the experiment.
-8. Record what happened.
-9. Continue until a stop condition, a blocker, or manual interruption.
+5. Re-anchor the standing subagent pool around the current goal, scope, and latest result.
+6. Make one focused experiment.
+7. Verify progress and run a guard if needed.
+8. Retain or discard the experiment.
+9. Record what happened.
+10. Continue until a stop condition, a blocker, or manual interruption.
 
 Foreground and background runs share the same artifacts. The difference is where the loop executes:
 
@@ -85,13 +88,17 @@ Codex should:
 1. Read the repo and generate a setup summary, usually through the wizard when the request is underspecified.
 2. Ask for any missing constraints.
 3. Ask you to choose `foreground` or `background`.
-4. Initialize the run artifacts.
-5. Iterate until the goal is met, the run is stopped, or a real blocker appears.
+4. Initialize the run artifacts and the standing subagent pool plan.
+5. Keep the main agent as orchestrator while reusing the same worker pool across iterations.
+6. Iterate until the goal is met, the run is stopped, or a real blocker appears.
+
+Continuation is simple on purpose: `autoresearch-memory.md` carries context forward, `resume` and `stop` manage the next step, and the per-iteration `--verify` command plus the contributor gate keep validation mechanical.
 
 You can also drive the helpers directly:
 
 ```text
 python scripts/autoresearch_wizard.py --goal "Reduce flaky tests overnight" --mode background --iterations 50 --duration 5h
+python scripts/autoresearch_subagent_plan.py --goal "Reduce flaky tests overnight" --scope api/tests --mode background
 python scripts/autoresearch_wizard.py --goal "Reduce flaky tests overnight" --mode background --iterations 50 --duration 5h --required-keep-labels verified --required-stop-labels ship-ready
 python scripts/autoresearch_init_run.py --goal "Reduce flaky tests" --metric "failing tests" --direction lower --verify "pytest tests/integration" --mode foreground --fresh-start
 python scripts/autoresearch_init_run.py --goal "Continue last autoresearch loop" --metric "failing tests" --direction lower --verify "pytest tests/integration" --mode foreground --memory-path autoresearch-memory.md --fresh-start
@@ -110,6 +117,7 @@ python scripts/autoresearch_runtime_ctl.py stop
 For overnight runs, set both `--iterations` and `--duration`. For example, `--iterations 50 --duration 5h` lets the run stop on either the iteration cap or the time budget.
 If you want hard retention/stop gates, pair that with `--required-keep-labels` and `--required-stop-labels`.
 Every completed run now also writes `autoresearch-self-improvement.md` and `autoresearch-memory.md`. The next wizard, init, and background launch flow automatically load `autoresearch-memory.md` when it exists, unless you deliberately override it with `--memory-path`.
+Setup summaries, state artifacts, launch manifests, and status snapshots now also carry a `subagent_pool` plan plus a `continuation_policy`, so resumed runs can keep the same orchestrator-first structure instead of rethinking the pool from scratch.
 For copy/symlink installation details and the release-validation commands, see [docs/INSTALL.md](docs/INSTALL.md).
 Use `scripts/autoresearch_complete_run.py` for foreground runs. `scripts/autoresearch_runtime_ctl.py complete` remains the background-run completion path.
 For machine-local fallback setup when Codex cannot refresh GitHub-backed plugins, see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
