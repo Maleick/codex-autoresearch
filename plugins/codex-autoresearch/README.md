@@ -12,7 +12,7 @@ What is included:
 - `hooks.json`, `.mcp.json`, and `.app.json` as plugin-level manifest targets.
 
 The plugin package is intentionally mirrored from the root repository sources.
-Treat the repo root as authoritative for behavior and documentation changes, then sync this bundled payload before release.
+Treat the repo root as authoritative for behavior and documentation changes, then run `python3 scripts/sync_plugin_payload.py` before release.
 The auxiliary manifest files stay as valid JSON objects even when they are intentionally empty.
 
 ## Packaging Notes
@@ -20,8 +20,8 @@ The auxiliary manifest files stay as valid JSON objects even when they are inten
 - Plugin ID: `codex-autoresearch`
 - Marketplace path: `./plugins/codex-autoresearch`
 - Manifest: `.codex-plugin/plugin.json`
-- Validation: `python scripts/check_plugin_distribution.py`
+- Sync: `python3 scripts/sync_plugin_payload.py`
+- Validation: `python3 scripts/check_plugin_distribution.py`
 
-When making changes to the root skill, mirror required resource updates in this
-plugin package so plugin consumers keep a complete feature set.
+When making changes to the root skill, sync this package, run the distribution checks, and then push to `main` so GitHub-backed installs can pick up the updated packaged payload on reload.
 Only add icon, logo, or screenshot fields to `plugin.json` after the referenced asset files exist.

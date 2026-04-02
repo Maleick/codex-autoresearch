@@ -53,15 +53,23 @@ The packaged plugin lives under `plugins/codex-autoresearch`. The repository roo
 - `scripts/`
 - `references/`
 
-Mirror those files into `plugins/codex-autoresearch/skills/codex-autoresearch/` before release.
+When maintaining the GitHub-backed plugin payload, use this workflow:
+
+1. Edit the root source-of-truth files.
+2. Run `python3 scripts/sync_plugin_payload.py`.
+3. Run the plugin payload validation checks.
+4. Push to `main`.
+
+GitHub-backed installs resolve `plugins/codex-autoresearch` from `Maleick/codex-autoresearch@main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
 
 ## Release Validation
 
 Before shipping the plugin payload, run:
 
 ```bash
-python scripts/check_plugin_distribution.py
-python -m pytest tests/test_plugin_distribution.py
+python3 scripts/sync_plugin_payload.py --check
+python3 scripts/check_plugin_distribution.py
+python3 -m pytest tests/test_plugin_distribution.py
 ```
 
-`check_plugin_distribution.py` verifies root-to-plugin parity, auxiliary manifest validity, and marketplace metadata. Leave icon/logo/screenshot fields out of the plugin manifest until the referenced files actually exist under `plugins/codex-autoresearch/assets`.
+`sync_plugin_payload.py --check` fails when the packaged plugin drifts from the root source. `check_plugin_distribution.py` verifies root-to-plugin parity, auxiliary manifest validity, and marketplace metadata. GitHub Actions reruns the same checks on pushes and pull requests. Leave icon/logo/screenshot fields out of the plugin manifest until the referenced files actually exist under `plugins/codex-autoresearch/assets`.

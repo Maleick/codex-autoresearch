@@ -42,5 +42,16 @@
       "Launcher metadata advertises the expanded routing behavior"
     ],
     "notes": "Adapted the narrower Codex bundle to support a Claude-autoresearch-style workflow pack without adopting the plugin architecture."
+  },
+  {
+    "id": "plugin_release_workflow",
+    "name": "Plugin sync workflow and CI enforcement for GitHub-backed installs",
+    "status": "complete",
+    "acceptance_tests": [
+      "A maintainer can run a single sync command to mirror SKILL.md, agents, scripts, and references into the packaged plugin payload",
+      "GitHub Actions fails when the packaged plugin payload drifts from the root source of truth",
+      "Contributor documentation defines the edit, sync, validate, and push workflow for updates that should reach GitHub-backed plugin installs"
+    ],
+    "notes": "Added scripts/sync_plugin_payload.py, a plugin-distribution GitHub Actions workflow, and packaging docs that explain how pushed changes reach GitHub-backed plugin installs."
   }
 ]

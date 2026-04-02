@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from scripts.check_plugin_distribution import validate_distribution
+from scripts.sync_plugin_payload import collect_drift
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +130,10 @@ def test_plugin_auxiliary_manifests_are_json_objects() -> None:
 def test_distribution_validator_accepts_repo_snapshot() -> None:
     payload = validate_distribution(REPO_ROOT)
 
-    assert payload["skills_path"].endswith("plugins\\codex-autoresearch\\skills\\codex-autoresearch")
+    assert Path(payload["skills_path"]) == PLUGIN_SKILL_ROOT.resolve()
     assert payload["asset_paths"] == {}
     assert "check_plugin_distribution.py" in payload["mirrored"]["scripts"]
+
+
+def test_sync_plugin_payload_reports_no_drift_for_repo_snapshot() -> None:
+    assert collect_drift(REPO_ROOT) == []

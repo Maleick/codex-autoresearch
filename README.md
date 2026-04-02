@@ -16,7 +16,7 @@ The current release also adds managed session hooks, a foreground completion hel
 - `agents/openai.yaml`: launcher metadata for Codex-compatible UIs
 - `references/`: short protocol documents that keep the loop grounded
 - `references/*-workflow.md`: specialized protocols for planning, debugging, fixing, documentation, prediction, scenarios, security, and shipping
-- `scripts/`: Python helpers for run setup, iteration logging, completion, hook installation, distribution validation, and supervisor control
+- `scripts/`: Python helpers for run setup, iteration logging, completion, hook installation, plugin payload sync and validation, and supervisor control
 - `tests/`: unit tests for artifact semantics, hooks, and plugin-distribution coverage
 
 ## Core Ideas
@@ -132,16 +132,17 @@ This repository also includes a local plugin artifact at:
 - `plugins/codex-autoresearch/skills/codex-autoresearch/` (bundled skill payload)
 - `.agents/plugins/marketplace.json`
 
-To run the plugin-distribution workflow locally:
+To update the GitHub-backed plugin safely:
 
 1. Treat the repo root (`SKILL.md`, `agents/`, `scripts/`, and `references/`) as the source of truth.
-2. Mirror required root-source changes into `plugins/codex-autoresearch/skills/codex-autoresearch/` before release.
-3. Run `git push` after edits; the marketplace entry points at `Maleick/codex-autoresearch`, so updates can come from GitHub.
-4. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing changes.
-5. Update `CHANGELOG.md` with release notes before tagging a user-facing release.
-6. Keep `marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
-7. Run `python scripts/check_plugin_distribution.py` and `python -m pytest tests/test_plugin_distribution.py` before release.
-8. Add release-ready assets under `plugins/codex-autoresearch/assets` only when you also wire those files into `plugin.json`.
+2. Run `python3 scripts/sync_plugin_payload.py` to mirror root-source changes into `plugins/codex-autoresearch/skills/codex-autoresearch/`.
+3. Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` version updated when making user-facing plugin changes.
+4. Update `CHANGELOG.md` with release notes before tagging a user-facing release.
+5. Keep `.agents/plugins/marketplace.json` source fields aligned (`ref`/`repo`) if install metadata changes.
+6. Run `python3 scripts/check_plugin_distribution.py` and `python3 -m pytest tests/test_plugin_distribution.py`.
+7. Push to `main`; the marketplace entry points at `Maleick/codex-autoresearch`, so GitHub-backed installs will pick up the packaged plugin after Codex reloads.
+8. CI reruns the sync check, distribution validator, and plugin distribution tests on pushes and pull requests.
+9. Add release-ready assets under `plugins/codex-autoresearch/assets` only when you also wire those files into `plugin.json`.
 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -163,4 +164,3 @@ This version is intentionally narrower than the upstream reference:
 - tests focused on artifact semantics instead of end-to-end process orchestration
 
 That keeps the bundle easier to audit and extend while preserving the key behavior: initialize state, log experiments, guide the user through setup, and make deterministic stop-or-continue decisions.
-
