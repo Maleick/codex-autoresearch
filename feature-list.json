@@ -108,5 +108,16 @@
       "Hook and contract tests verify the post-launch continuation wording and the orchestrator-only state/result ownership rules"
     ],
     "notes": "Adds a concrete subagent-pool planner plus helper/runtime metadata so the skill can stay subagent-first without relying on prose alone."
+  },
+  {
+    "id": "generic_start_stop_hooks",
+    "name": "Generic start/stop hook runtime with hybrid next-step continuation",
+    "status": "complete",
+    "acceptance_tests": [
+      "Installer migrates the managed hook package to ~/.codex/hooks-runtime and rewrites hooks.json to the new start/stop script names",
+      "Stop hook continues on supervisor relaunch and tailors the block prompt from the latest task_complete Next step/Next steps section",
+      "State-driven stop and needs_human decisions still terminate even when the final response includes Next step text"
+    ],
+    "notes": "Renamed the managed hook modules to generic start/stop/common/context names, kept the state supervisor as the hard stop authority, and added transcript-based Next step continuation prompts."
   }
 ]

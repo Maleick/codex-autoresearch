@@ -24,7 +24,7 @@ try:
         write_run_report,
         write_launch_manifest,
     )
-    from scripts.autoresearch_hook_context import update_hook_context_pointer
+    from scripts.hook_context import update_hook_context_pointer
 except ModuleNotFoundError:
     from autoresearch_helpers import (
         AutoresearchError,
@@ -47,7 +47,7 @@ except ModuleNotFoundError:
         write_run_report,
         write_launch_manifest,
     )
-    from autoresearch_hook_context import update_hook_context_pointer
+    from hook_context import update_hook_context_pointer
 
 
 def build_parser() -> argparse.ArgumentParser:

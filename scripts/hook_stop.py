@@ -5,26 +5,40 @@ import subprocess
 import sys
 
 try:
-    from scripts.autoresearch_hook_context import update_hook_context_pointer
-    from scripts.autoresearch_hook_common import build_context
+    from scripts.hook_context import update_hook_context_pointer
+    from scripts.hook_common import (
+        build_context,
+        extract_next_steps_block,
+        load_last_task_complete_message,
+        next_steps_has_multiple_options,
+        next_steps_mentions_recommendation,
+    )
 except ModuleNotFoundError:
-    from autoresearch_hook_context import update_hook_context_pointer
-    from autoresearch_hook_common import build_context
+    from hook_context import update_hook_context_pointer
+    from hook_common import (
+        build_context,
+        extract_next_steps_block,
+        load_last_task_complete_message,
+        next_steps_has_multiple_options,
+        next_steps_mentions_recommendation,
+    )
 
 
 NONTERMINAL_DECISIONS = {"relaunch"}
 CONTINUATION_PROMPT = (
-    "Continue the current autoresearch run.\n"
+    "Continue the current managed run.\n"
     "Do not rerun the wizard.\n"
-    "Re-anchor the standing subagent pool before the next handoff.\n"
     "If you just completed an experiment, record it before starting the next one.\n"
     "Honor keep/stop label gates, iteration limits, and duration limits before stopping.\n"
-    "After launch approval, keep going unless the user stops the run or a real needs_human blocker appears."
+    "Do not ask the user for permission.\n"
+    "Only stop when your final response no longer contains a `Next step:` or `Next steps:` section."
 )
 FOLLOWUP_CONTINUATION_PROMPT = (
-    "Continue the current autoresearch run.\n"
+    "Continue the current managed run.\n"
     "You are already inside a stop-hook continuation.\n"
-    "Do not stop yet; re-anchor the standing subagent pool and record the last experiment before the next one."
+    "Do not stop yet; record the last experiment before the next one.\n"
+    "Do not ask the user for permission.\n"
+    "Only stop when your final response no longer contains a `Next step:` or `Next steps:` section."
 )
 
 
@@ -63,11 +77,34 @@ def emit_block(reason: str) -> None:
     print(json.dumps(payload), end="")
 
 
+def build_continuation_prompt(next_steps: str | None, *, followup: bool) -> str:
+    lines = [FOLLOWUP_CONTINUATION_PROMPT if followup else CONTINUATION_PROMPT]
+    if not isinstance(next_steps, str) or not next_steps.strip():
+        return "\n".join(lines)
+
+    if next_steps_has_multiple_options(next_steps):
+        if next_steps_mentions_recommendation(next_steps):
+            lines.append("Take the recommended option from the final `Next steps:` section and continue.")
+        else:
+            lines.append("Choose the strongest default option from the final `Next steps:` section and continue.")
+    else:
+        lines.append("Continue with the final `Next step:` below.")
+
+    lines.extend(
+        [
+            "",
+            "Final next step(s):",
+            next_steps,
+        ]
+    )
+    return "\n".join(lines)
+
+
 def main() -> int:
     context = build_context(__file__)
     if context is None or context.skill_root is None:
         return 0
-    if not context.session_is_autoresearch:
+    if not context.session_is_managed:
         return 0
     if not context.has_active_artifacts:
         return 0
@@ -82,7 +119,9 @@ def main() -> int:
 
     if decision in NONTERMINAL_DECISIONS:
         active = bool(context.payload.get("stop_hook_active"))
-        emit_block(FOLLOWUP_CONTINUATION_PROMPT if active else CONTINUATION_PROMPT)
+        last_message = load_last_task_complete_message(context.transcript_path)
+        next_steps = extract_next_steps_block(last_message)
+        emit_block(build_continuation_prompt(next_steps, followup=active))
     else:
         update_hook_context_pointer(
             repo=context.repo,

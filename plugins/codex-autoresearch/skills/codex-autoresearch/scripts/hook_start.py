@@ -3,14 +3,13 @@ from __future__ import annotations
 import json
 
 try:
-    from scripts.autoresearch_hook_common import build_context
+    from scripts.hook_common import build_context
 except ModuleNotFoundError:
-    from autoresearch_hook_common import build_context
+    from hook_common import build_context
 
 
 CHECKLIST_LINES = (
-    "- If this is a fresh run, baseline first, then initialize results/state artifacts.",
-    "- Re-anchor the standing subagent pool before the next handoff; keep the orchestrator as the only state owner.",
+    "- If this is a fresh managed run, baseline first, then initialize results/state artifacts.",
     "- Record every completed experiment before starting the next one.",
     "- Keep retain/stop label gates satisfied before marking an iteration as kept.",
     "- Respect iteration and duration caps; use status --report-path when you need a report.",
@@ -33,7 +32,7 @@ def main() -> int:
     context = build_context(__file__)
     if context is None or context.skill_root is None:
         return 0
-    if not context.session_is_autoresearch:
+    if not context.session_is_managed:
         return 0
     if not context.has_active_artifacts:
         return 0

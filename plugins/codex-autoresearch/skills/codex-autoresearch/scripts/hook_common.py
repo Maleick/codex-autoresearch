@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -9,23 +10,31 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts.autoresearch_hook_context import load_hook_context_pointer
+    from scripts.hook_context import load_hook_context_pointer
 except ModuleNotFoundError:
-    from autoresearch_hook_context import load_hook_context_pointer
+    from hook_context import load_hook_context_pointer
 
 
 RESULTS_HEADER_PREFIX = "timestamp\titeration\tdecision\t"
-AUTORESEARCH_SKILL_MARKER = "$codex-autoresearch"
-AUTORESEARCH_BACKGROUND_MARKER = "This repo is managed by the autoresearch runtime controller."
-HOOK_ACTIVE_ENV = "AUTORESEARCH_HOOK_ACTIVE"
-HOOK_RESULTS_PATH_ENV = "AUTORESEARCH_HOOK_RESULTS_PATH"
-HOOK_STATE_PATH_ENV = "AUTORESEARCH_HOOK_STATE_PATH"
-HOOK_LAUNCH_PATH_ENV = "AUTORESEARCH_HOOK_LAUNCH_PATH"
-HOOK_RUNTIME_PATH_ENV = "AUTORESEARCH_HOOK_RUNTIME_PATH"
+MANAGED_SESSION_MARKERS = (
+    "$codex-autoresearch",
+    "This repo is managed by the autoresearch runtime controller.",
+)
+ACTIVE_ENV_NAMES = ("HOOK_RUNTIME_ACTIVE", "AUTORESEARCH_HOOK_ACTIVE")
+RESULTS_PATH_ENV_NAMES = ("HOOK_RUNTIME_RESULTS_PATH", "AUTORESEARCH_HOOK_RESULTS_PATH")
+STATE_PATH_ENV_NAMES = ("HOOK_RUNTIME_STATE_PATH", "AUTORESEARCH_HOOK_STATE_PATH")
+LAUNCH_PATH_ENV_NAMES = ("HOOK_RUNTIME_LAUNCH_PATH", "AUTORESEARCH_HOOK_LAUNCH_PATH")
+RUNTIME_PATH_ENV_NAMES = ("HOOK_RUNTIME_PATH", "AUTORESEARCH_HOOK_RUNTIME_PATH")
+NEXT_STEP_INLINE_PATTERN = re.compile(r"^\s*next steps?\s*:\s*(?P<body>\S.*)\s*$", re.IGNORECASE)
+NEXT_STEP_HEADING_PATTERN = re.compile(r"^\s*next steps?\s*:\s*$", re.IGNORECASE)
+OPTION_LINE_PATTERN = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+")
+RECOMMENDED_PATTERN = re.compile(r"recommended", re.IGNORECASE)
+SECTION_HEADER_PATTERN = re.compile(r"^\s*(?:#{1,6}\s+\S|\*\*[^*].*?\*\*)\s*$")
+ARCHIVE_READY_PATTERN = re.compile(r"^\s*\*\*THREAD COMPLETE\. READY FOR ARCHIVE\.\*\*\s*$")
 
 
 @dataclass(frozen=True)
-class HookArtifactPaths:
+class ManagedArtifactPaths:
     results_path: Path
     state_path: Path | None
     launch_path: Path | None
@@ -33,18 +42,19 @@ class HookArtifactPaths:
 
 
 @dataclass(frozen=True)
-class HookContext:
+class ManagedHookContext:
     payload: dict[str, object]
     cwd: Path
     repo: Path
     skill_root: Path | None
-    artifacts: HookArtifactPaths
+    artifacts: ManagedArtifactPaths
     opt_in_env: bool
     transcript_marked: bool
     pointer_active: bool | None
+    transcript_path: Path | None
 
     @property
-    def session_is_autoresearch(self) -> bool:
+    def session_is_managed(self) -> bool:
         return self.opt_in_env or self.transcript_marked or self.pointer_active is True
 
     @property
@@ -58,7 +68,11 @@ class HookContext:
             return True
         if paths.state_path is not None and paths.state_path.exists():
             return True
-        return results_log_looks_autoresearch(paths.results_path)
+        return results_log_looks_managed(paths.results_path)
+
+    @property
+    def session_is_autoresearch(self) -> bool:
+        return self.session_is_managed
 
 
 def load_input() -> dict[str, object]:
@@ -113,7 +127,7 @@ def resolve_repo_relative(repo: Path, raw: str | None, default_name: str) -> Pat
     return candidate.expanduser().resolve()
 
 
-def results_log_looks_autoresearch(results_path: Path) -> bool:
+def results_log_looks_managed(results_path: Path) -> bool:
     if not results_path.exists():
         return False
     try:
@@ -153,19 +167,27 @@ def resolve_skill_root(cwd: Path, repo: Path, manifest: dict[str, object]) -> Pa
     return None
 
 
-def env_truthy(name: str) -> bool:
-    value = os.environ.get(name, "")
-    return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+def env_value(names: tuple[str, ...]) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and value.strip():
+            return value
+    return None
+
+
+def env_truthy(names: tuple[str, ...]) -> bool:
+    value = env_value(names)
+    return isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
 
 
 def _coalesce_path(
     *,
     repo: Path,
-    env_name: str,
+    env_names: tuple[str, ...],
     pointer_path: Path | None,
     default_name: str,
 ) -> Path:
-    raw = os.environ.get(env_name)
+    raw = env_value(env_names)
     if raw:
         return resolve_repo_relative(repo, raw, default_name)
     if pointer_path is not None:
@@ -173,30 +195,30 @@ def _coalesce_path(
     return resolve_repo_relative(repo, None, default_name)
 
 
-def resolve_artifact_paths(repo: Path) -> tuple[HookArtifactPaths, bool | None]:
+def resolve_artifact_paths(repo: Path) -> tuple[ManagedArtifactPaths, bool | None]:
     pointer = load_hook_context_pointer(repo)
-    return HookArtifactPaths(
+    return ManagedArtifactPaths(
         results_path=_coalesce_path(
             repo=repo,
-            env_name=HOOK_RESULTS_PATH_ENV,
+            env_names=RESULTS_PATH_ENV_NAMES,
             pointer_path=pointer.results_path if pointer is not None else None,
             default_name="research-results.tsv",
         ),
         state_path=_coalesce_path(
             repo=repo,
-            env_name=HOOK_STATE_PATH_ENV,
+            env_names=STATE_PATH_ENV_NAMES,
             pointer_path=pointer.state_path if pointer is not None else None,
             default_name="autoresearch-state.json",
         ),
         launch_path=_coalesce_path(
             repo=repo,
-            env_name=HOOK_LAUNCH_PATH_ENV,
+            env_names=LAUNCH_PATH_ENV_NAMES,
             pointer_path=pointer.launch_path if pointer is not None else None,
             default_name="autoresearch-launch.json",
         ),
         runtime_path=_coalesce_path(
             repo=repo,
-            env_name=HOOK_RUNTIME_PATH_ENV,
+            env_names=RUNTIME_PATH_ENV_NAMES,
             pointer_path=pointer.runtime_path if pointer is not None else None,
             default_name="autoresearch-runtime.json",
         ),
@@ -224,7 +246,7 @@ def iter_text_fields(value: Any) -> list[str]:
     return found
 
 
-def transcript_indicates_autoresearch_session(transcript_path: Path | None) -> bool:
+def transcript_indicates_managed_session(transcript_path: Path | None) -> bool:
     if transcript_path is None or not transcript_path.exists():
         return False
     try:
@@ -239,16 +261,97 @@ def transcript_indicates_autoresearch_session(transcript_path: Path | None) -> b
                     continue
                 for text in iter_text_fields(payload):
                     stripped = text.lstrip()
-                    if stripped.startswith(AUTORESEARCH_SKILL_MARKER):
-                        return True
-                    if stripped.startswith(AUTORESEARCH_BACKGROUND_MARKER):
+                    if any(stripped.startswith(marker) for marker in MANAGED_SESSION_MARKERS):
                         return True
     except OSError:
         return False
     return False
 
 
-def build_context(script_path: str | Path) -> HookContext | None:
+def load_last_task_complete_message(transcript_path: Path | None) -> str | None:
+    if transcript_path is None or not transcript_path.exists():
+        return None
+    try:
+        lines = transcript_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return None
+
+    for raw_line in reversed(lines):
+        if not raw_line.strip():
+            continue
+        try:
+            payload = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") != "event_msg":
+            continue
+        event_payload = payload.get("payload")
+        if not isinstance(event_payload, dict):
+            continue
+        if event_payload.get("type") != "task_complete":
+            continue
+        message = event_payload.get("last_agent_message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return None
+
+
+def extract_next_steps_block(message: str | None) -> str | None:
+    if not isinstance(message, str) or not message.strip():
+        return None
+
+    lines = message.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        inline_match = NEXT_STEP_INLINE_PATTERN.match(line)
+        if inline_match is not None:
+            return inline_match.group("body").strip()
+        if NEXT_STEP_HEADING_PATTERN.match(line):
+            start = index + 1
+            break
+    if start is None:
+        return None
+
+    collected: list[str] = []
+    blank_run = 0
+    for line in lines[start:]:
+        if ARCHIVE_READY_PATTERN.match(line):
+            break
+        if collected and SECTION_HEADER_PATTERN.match(line):
+            break
+        if not line.strip():
+            blank_run += 1
+            if collected and blank_run >= 2:
+                break
+            if collected:
+                collected.append("")
+            continue
+        if collected and blank_run and not OPTION_LINE_PATTERN.match(line) and line == line.lstrip():
+            break
+        blank_run = 0
+        collected.append(line.rstrip())
+
+    body = "\n".join(collected).strip()
+    return body or None
+
+
+def next_steps_has_multiple_options(next_steps: str | None) -> bool:
+    if not isinstance(next_steps, str) or not next_steps.strip():
+        return False
+    option_lines = [line for line in next_steps.splitlines() if OPTION_LINE_PATTERN.match(line)]
+    if len(option_lines) >= 2:
+        return True
+    lowered = next_steps.lower()
+    return "option 1" in lowered or "option a" in lowered or "\nor\n" in lowered
+
+
+def next_steps_mentions_recommendation(next_steps: str | None) -> bool:
+    if not isinstance(next_steps, str):
+        return False
+    return bool(RECOMMENDED_PATTERN.search(next_steps))
+
+
+def build_context(script_path: str | Path) -> ManagedHookContext | None:
     payload = load_input()
     cwd_value = payload.get("cwd")
     if not isinstance(cwd_value, str) or not cwd_value:
@@ -260,13 +363,20 @@ def build_context(script_path: str | Path) -> HookContext | None:
     transcript_path = payload_transcript_path(payload)
     artifacts, pointer_active = resolve_artifact_paths(repo)
 
-    return HookContext(
+    return ManagedHookContext(
         payload=payload,
         cwd=cwd,
         repo=repo,
         skill_root=resolve_skill_root(cwd, repo, manifest),
         artifacts=artifacts,
-        opt_in_env=env_truthy(HOOK_ACTIVE_ENV),
-        transcript_marked=transcript_indicates_autoresearch_session(transcript_path),
+        opt_in_env=env_truthy(ACTIVE_ENV_NAMES),
+        transcript_marked=transcript_indicates_managed_session(transcript_path),
         pointer_active=pointer_active,
+        transcript_path=transcript_path,
     )
+
+
+HookArtifactPaths = ManagedArtifactPaths
+HookContext = ManagedHookContext
+results_log_looks_autoresearch = results_log_looks_managed
+transcript_indicates_autoresearch_session = transcript_indicates_managed_session

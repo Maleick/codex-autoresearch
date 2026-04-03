@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,15 +21,20 @@ except ModuleNotFoundError:
 MANIFEST_VERSION = 1
 FEATURE_SECTION = "features"
 FEATURE_KEY = "codex_hooks"
-MANAGED_DIR_NAME = "autoresearch-hooks"
-SESSION_SCRIPT_NAME = "autoresearch_hook_session_start.py"
-STOP_SCRIPT_NAME = "autoresearch_hook_stop.py"
-COMMON_SCRIPT_NAME = "autoresearch_hook_common.py"
-CONTEXT_SCRIPT_NAME = "autoresearch_hook_context.py"
+MANAGED_DIR_NAME = "hooks-runtime"
+START_SCRIPT_NAME = "hook_start.py"
+STOP_SCRIPT_NAME = "hook_stop.py"
+COMMON_SCRIPT_NAME = "hook_common.py"
+CONTEXT_SCRIPT_NAME = "hook_context.py"
+LEGACY_MANAGED_DIR_NAME = "autoresearch-hooks"
+LEGACY_START_SCRIPT_NAME = "autoresearch_hook_session_start.py"
+LEGACY_STOP_SCRIPT_NAME = "autoresearch_hook_stop.py"
+LEGACY_COMMON_SCRIPT_NAME = "autoresearch_hook_common.py"
+LEGACY_CONTEXT_SCRIPT_NAME = "autoresearch_hook_context.py"
 MANIFEST_FILE_NAME = "manifest.json"
-SESSION_STATUS_MESSAGE = "codex-autoresearch SessionStart hook"
-STOP_STATUS_MESSAGE = "codex-autoresearch Stop hook"
-SESSION_TIMEOUT_SECONDS = 5
+START_STATUS_MESSAGE = "managed-runtime SessionStart hook"
+STOP_STATUS_MESSAGE = "managed-runtime Stop hook"
+START_TIMEOUT_SECONDS = 5
 STOP_TIMEOUT_SECONDS = 10
 
 
@@ -38,6 +44,10 @@ def codex_home() -> Path:
 
 def hooks_home() -> Path:
     return codex_home() / MANAGED_DIR_NAME
+
+
+def legacy_hooks_home() -> Path:
+    return codex_home() / LEGACY_MANAGED_DIR_NAME
 
 
 def config_path() -> Path:
@@ -60,16 +70,36 @@ def context_script_path() -> Path:
     return hooks_home() / CONTEXT_SCRIPT_NAME
 
 
-def session_script_path() -> Path:
-    return hooks_home() / SESSION_SCRIPT_NAME
+def start_script_path() -> Path:
+    return hooks_home() / START_SCRIPT_NAME
 
 
 def stop_script_path() -> Path:
     return hooks_home() / STOP_SCRIPT_NAME
 
 
-def source_session_script() -> Path:
-    return Path(__file__).resolve().with_name(SESSION_SCRIPT_NAME)
+def legacy_manifest_path() -> Path:
+    return legacy_hooks_home() / MANIFEST_FILE_NAME
+
+
+def legacy_common_script_path() -> Path:
+    return legacy_hooks_home() / LEGACY_COMMON_SCRIPT_NAME
+
+
+def legacy_context_script_path() -> Path:
+    return legacy_hooks_home() / LEGACY_CONTEXT_SCRIPT_NAME
+
+
+def legacy_start_script_path() -> Path:
+    return legacy_hooks_home() / LEGACY_START_SCRIPT_NAME
+
+
+def legacy_stop_script_path() -> Path:
+    return legacy_hooks_home() / LEGACY_STOP_SCRIPT_NAME
+
+
+def source_start_script() -> Path:
+    return Path(__file__).resolve().with_name(START_SCRIPT_NAME)
 
 
 def source_stop_script() -> Path:
@@ -88,9 +118,28 @@ def current_skill_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def managed_script_paths() -> set[Path]:
+    return {
+        start_script_path(),
+        stop_script_path(),
+        legacy_start_script_path(),
+        legacy_stop_script_path(),
+    }
+
+
+def legacy_install_paths() -> tuple[Path, ...]:
+    return (
+        legacy_common_script_path(),
+        legacy_context_script_path(),
+        legacy_start_script_path(),
+        legacy_stop_script_path(),
+        legacy_manifest_path(),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Install, inspect, or remove optional user-level Codex hooks used by codex-autoresearch."
+        description="Install, inspect, or remove optional user-level start/stop hooks used by codex-autoresearch."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command_name, help_text in (
@@ -236,11 +285,35 @@ def group_matches_command(group: Any, command: str) -> bool:
     return hook.get("type") == "command" and hook.get("command") == command
 
 
-def remove_managed_groups(groups: list[Any], commands: set[str]) -> tuple[list[Any], int]:
+def group_command(group: Any) -> str | None:
+    if not isinstance(group, dict):
+        return None
+    hooks = group.get("hooks")
+    if not isinstance(hooks, list) or len(hooks) != 1:
+        return None
+    hook = hooks[0]
+    if not isinstance(hook, dict) or hook.get("type") != "command":
+        return None
+    command = hook.get("command")
+    return command if isinstance(command, str) else None
+
+
+def group_mentions_any_script(group: Any, script_paths: set[Path]) -> bool:
+    command = group_command(group)
+    if not isinstance(command, str):
+        return False
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        parts = [command]
+    return any(str(path) in parts or str(path) in command for path in script_paths)
+
+
+def remove_managed_groups(groups: list[Any], commands: set[str], script_paths: set[Path]) -> tuple[list[Any], int]:
     kept: list[Any] = []
     removed = 0
     for group in groups:
-        if any(group_matches_command(group, command) for command in commands):
+        if any(group_matches_command(group, command) for command in commands) or group_mentions_any_script(group, script_paths):
             removed += 1
             continue
         kept.append(group)
@@ -267,7 +340,7 @@ def write_manifest(*, feature_enabled_by_installer: bool) -> None:
         "managed_scripts": {
             "common": str(common_script_path()),
             "context": str(context_script_path()),
-            "session_start": str(session_script_path()),
+            "start": str(start_script_path()),
             "stop": str(stop_script_path()),
         },
     }
@@ -289,20 +362,24 @@ def install_managed_scripts() -> None:
     hooks_home().mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_common_script(), common_script_path())
     shutil.copy2(source_context_script(), context_script_path())
-    shutil.copy2(source_session_script(), session_script_path())
+    shutil.copy2(source_start_script(), start_script_path())
     shutil.copy2(source_stop_script(), stop_script_path())
+
+
+def cleanup_legacy_install() -> None:
+    shutil.rmtree(legacy_hooks_home(), ignore_errors=True)
 
 
 def status() -> dict[str, Any]:
     config_text = read_text(config_path())
     hooks_payload = normalize_hooks_payload(load_json_file(hooks_path(), default={"hooks": {}}))
     manifest = read_manifest()
-    session_command = installed_command(session_script_path())
+    start_command = installed_command(start_script_path())
     stop_command = installed_command(stop_script_path())
     hooks_map = hooks_payload.get("hooks", {})
-    session_groups = hooks_map.get("SessionStart", []) if isinstance(hooks_map, dict) else []
+    start_groups = hooks_map.get("SessionStart", []) if isinstance(hooks_map, dict) else []
     stop_groups = hooks_map.get("Stop", []) if isinstance(hooks_map, dict) else []
-    managed_session = any(group_matches_command(group, session_command) for group in session_groups)
+    managed_start = any(group_matches_command(group, start_command) for group in start_groups)
     managed_stop = any(group_matches_command(group, stop_command) for group in stop_groups)
 
     return {
@@ -312,24 +389,24 @@ def status() -> dict[str, Any]:
         "managed_dir": str(hooks_home()),
         "feature_enabled": parse_feature_value(config_text) is True,
         "feature_enabled_by_installer": bool(manifest.get("feature_enabled_by_installer")),
-        "managed_session_start_installed": managed_session and session_script_path().exists(),
+        "managed_start_installed": managed_start and start_script_path().exists(),
         "managed_stop_installed": managed_stop and stop_script_path().exists(),
         "managed_scripts_present": (
             common_script_path().exists()
             and context_script_path().exists()
-            and session_script_path().exists()
+            and start_script_path().exists()
             and stop_script_path().exists()
         ),
         "manifest_present": manifest_path().exists(),
         "skill_root_fallback": manifest.get("skill_root_fallback") or str(current_skill_root()),
-        "other_hook_groups_present": count_all_hook_groups(hooks_payload) - int(managed_session) - int(managed_stop),
+        "other_hook_groups_present": count_all_hook_groups(hooks_payload) - int(managed_start) - int(managed_stop),
         "ready_for_future_sessions": (
             parse_feature_value(config_text) is True
-            and managed_session
+            and managed_start
             and managed_stop
             and common_script_path().exists()
             and context_script_path().exists()
-            and session_script_path().exists()
+            and start_script_path().exists()
             and stop_script_path().exists()
         ),
     }
@@ -355,28 +432,29 @@ def install() -> dict[str, Any]:
     if not isinstance(hooks_map, dict):
         raise AutoresearchError("hooks.json must contain an object at top-level key 'hooks'")
 
-    session_command = installed_command(session_script_path())
+    start_command = installed_command(start_script_path())
     stop_command = installed_command(stop_script_path())
-    managed_commands = {session_command, stop_command}
+    commands = {start_command, stop_command}
+    script_paths = managed_script_paths()
 
-    existing_session = hooks_map.get("SessionStart", [])
-    if not isinstance(existing_session, list):
+    existing_start = hooks_map.get("SessionStart", [])
+    if not isinstance(existing_start, list):
         raise AutoresearchError("hooks.SessionStart must be a list")
-    session_groups, _ = remove_managed_groups(existing_session, managed_commands)
-    session_groups.append(
+    start_groups, _ = remove_managed_groups(existing_start, commands, script_paths)
+    start_groups.append(
         build_managed_group(
-            command=session_command,
-            status_message=SESSION_STATUS_MESSAGE,
-            timeout=SESSION_TIMEOUT_SECONDS,
+            command=start_command,
+            status_message=START_STATUS_MESSAGE,
+            timeout=START_TIMEOUT_SECONDS,
             matcher="startup|resume",
         )
     )
-    hooks_map["SessionStart"] = session_groups
+    hooks_map["SessionStart"] = start_groups
 
     existing_stop = hooks_map.get("Stop", [])
     if not isinstance(existing_stop, list):
         raise AutoresearchError("hooks.Stop must be a list")
-    stop_groups, _ = remove_managed_groups(existing_stop, managed_commands)
+    stop_groups, _ = remove_managed_groups(existing_stop, commands, script_paths)
     stop_groups.append(
         build_managed_group(
             command=stop_command,
@@ -391,6 +469,7 @@ def install() -> dict[str, Any]:
         json.dumps(payload, indent=2) + "\n",
     )
     write_manifest(feature_enabled_by_installer=feature_enabled_by_installer)
+    cleanup_legacy_install()
 
     current = status()
     current["config_backup"] = config_backup
@@ -408,17 +487,18 @@ def uninstall() -> dict[str, Any]:
     if not isinstance(hooks_map, dict):
         raise AutoresearchError("hooks.json must contain an object at top-level key 'hooks'")
 
-    managed_commands = {
-        installed_command(session_script_path()),
+    commands = {
+        installed_command(start_script_path()),
         installed_command(stop_script_path()),
     }
+    script_paths = managed_script_paths()
 
     removed_count = 0
     for event_name in ("SessionStart", "Stop"):
         groups = hooks_map.get(event_name, [])
         if not isinstance(groups, list):
             raise AutoresearchError(f"hooks.{event_name} must be a list")
-        kept, removed = remove_managed_groups(groups, managed_commands)
+        kept, removed = remove_managed_groups(groups, commands, script_paths)
         removed_count += removed
         if kept:
             hooks_map[event_name] = kept
@@ -446,7 +526,7 @@ def uninstall() -> dict[str, Any]:
     for script_path in (
         common_script_path(),
         context_script_path(),
-        session_script_path(),
+        start_script_path(),
         stop_script_path(),
         manifest_path(),
     ):
@@ -457,6 +537,7 @@ def uninstall() -> dict[str, Any]:
             hooks_home().rmdir()
         except OSError:
             pass
+    cleanup_legacy_install()
 
     current = status()
     current["config_backup"] = config_backup
