@@ -1,8 +1,26 @@
 from __future__ import annotations
 
-from scripts.autoresearch_hook_session_start import CHECKLIST_LINES
-from scripts.autoresearch_hook_stop import CONTINUATION_PROMPT, FOLLOWUP_CONTINUATION_PROMPT
-from scripts.autoresearch_hook_context import load_hook_context_pointer, write_hook_context_pointer
+import json
+from types import SimpleNamespace
+
+from scripts import autoresearch_hooks_ctl as hooks_ctl
+from scripts.hook_common import (
+    extract_next_steps_block,
+    load_last_task_complete_message,
+    message_declares_archive_ready,
+    next_steps_has_multiple_options,
+    next_steps_mentions_recommendation,
+)
+from scripts.hook_context import load_hook_context_pointer, write_hook_context_pointer
+from scripts.hook_start import CHECKLIST_LINES
+from scripts import hook_stop
+from scripts.hook_stop import (
+    CONTINUATION_PROMPT,
+    FOLLOWUP_CONTINUATION_PROMPT,
+    archive_readiness_blockers,
+    build_archive_guard_prompt,
+    build_continuation_prompt,
+)
 
 
 def test_hook_context_round_trips_repo_relative_paths(tmp_path):
@@ -34,12 +52,170 @@ def test_hook_context_round_trips_repo_relative_paths(tmp_path):
     assert pointer.launch_path == launch_path.resolve()
 
 
-def test_session_start_hook_mentions_standing_subagent_pool():
-    assert any("standing subagent pool" in line for line in CHECKLIST_LINES)
+def test_session_start_hook_mentions_managed_run_defaults():
+    assert any("fresh managed run" in line for line in CHECKLIST_LINES)
     assert any("continue by default" in line for line in CHECKLIST_LINES)
 
 
-def test_stop_hook_prompts_reanchor_the_pool_before_stopping():
-    assert "Re-anchor the standing subagent pool" in CONTINUATION_PROMPT
-    assert "user stops the run" in CONTINUATION_PROMPT
-    assert "re-anchor the standing subagent pool" in FOLLOWUP_CONTINUATION_PROMPT.lower()
+def test_stop_hook_default_prompts_require_next_step_exhaustion():
+    assert "Do not ask the user for permission." in CONTINUATION_PROMPT
+    assert "Next step:" in CONTINUATION_PROMPT
+    assert "already inside a stop-hook continuation" in FOLLOWUP_CONTINUATION_PROMPT
+
+
+def test_load_last_task_complete_message_prefers_latest_completion(tmp_path):
+    transcript_path = tmp_path / "session.jsonl"
+    transcript_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "first"}}),
+                json.dumps({"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "second"}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert load_last_task_complete_message(transcript_path) == "second"
+
+
+def test_extract_next_steps_supports_inline_and_block_forms():
+    inline = "Summary\n\nNext step: Tighten branch protection on master."
+    block = "Summary\n\nNext steps:\n1. Tighten branch protection (Recommended)\n2. Document the gate\n\n**Verification**"
+
+    assert extract_next_steps_block(inline) == "Tighten branch protection on master."
+    assert extract_next_steps_block(block) == "1. Tighten branch protection (Recommended)\n2. Document the gate"
+
+
+def test_next_steps_detection_distinguishes_multiple_options_and_recommendations():
+    next_steps = "1. Tighten branch protection (Recommended)\n2. Document the gate"
+
+    assert next_steps_has_multiple_options(next_steps) is True
+    assert next_steps_mentions_recommendation(next_steps) is True
+
+
+def test_build_continuation_prompt_uses_recommended_or_default_language():
+    recommended_prompt = build_continuation_prompt(
+        "1. Tighten branch protection (Recommended)\n2. Document the gate",
+        followup=False,
+    )
+    default_prompt = build_continuation_prompt(
+        "1. Tighten branch protection\n2. Document the gate",
+        followup=True,
+    )
+
+    assert "recommended option" in recommended_prompt
+    assert "Choose the strongest default option" in default_prompt
+    assert "Final next step(s):" in recommended_prompt
+
+
+def test_message_declares_archive_ready_matches_completion_signal():
+    message = "Summary\n\n**THREAD COMPLETE. READY FOR ARCHIVE.**"
+
+    assert message_declares_archive_ready(message) is True
+    assert message_declares_archive_ready("Summary only") is False
+
+
+def test_archive_readiness_blockers_report_dirty_unpushed_branch(monkeypatch, tmp_path):
+    context = SimpleNamespace(repo=tmp_path)
+    monkeypatch.setattr(hook_stop, "git_status_entries", lambda repo: [" M scripts/hook_stop.py"])
+    monkeypatch.setattr(hook_stop, "current_branch_name", lambda repo: "codex/test")
+    monkeypatch.setattr(hook_stop, "default_branch_name", lambda repo: "main")
+    monkeypatch.setattr(hook_stop, "branch_has_upstream", lambda repo: True)
+    monkeypatch.setattr(hook_stop, "ahead_of_upstream_count", lambda repo: 2)
+    monkeypatch.setattr(hook_stop, "github_repo_name", lambda repo: "Maleick/codex-autoresearch")
+    monkeypatch.setattr(hook_stop, "branch_has_open_or_merged_pr", lambda repo, repo_name: False)
+
+    blockers = archive_readiness_blockers(context)
+
+    assert any("uncommitted changes" in blocker for blocker in blockers)
+    assert any("unpushed commit" in blocker for blocker in blockers)
+    assert any("pull request" in blocker for blocker in blockers)
+
+
+def test_build_archive_guard_prompt_lists_blockers():
+    prompt = build_archive_guard_prompt(["Working tree still has uncommitted changes."])
+
+    assert "Do not mark the thread archive-ready yet." in prompt
+    assert "Archive blockers:" in prompt
+    assert "- Working tree still has uncommitted changes." in prompt
+
+
+def test_stop_hook_state_decision_wins_over_next_steps(monkeypatch, tmp_path):
+    context = SimpleNamespace(
+        skill_root=tmp_path,
+        session_is_managed=True,
+        has_active_artifacts=True,
+        payload={"stop_hook_active": False},
+        transcript_path=tmp_path / "session.jsonl",
+        repo=tmp_path,
+        opt_in_env=False,
+        artifacts=SimpleNamespace(
+            results_path=tmp_path / "research-results.tsv",
+            state_path=tmp_path / "autoresearch-state.json",
+            launch_path=None,
+            runtime_path=None,
+        ),
+    )
+
+    emitted: list[str] = []
+    updates: list[dict[str, object]] = []
+    monkeypatch.setattr(hook_stop, "build_context", lambda _: context)
+    monkeypatch.setattr(hook_stop, "run_supervisor", lambda _: {"decision": "stop"})
+    monkeypatch.setattr(hook_stop, "emit_block", emitted.append)
+    monkeypatch.setattr(hook_stop, "update_hook_context_pointer", lambda **kwargs: updates.append(kwargs))
+
+    assert hook_stop.main() == 0
+    assert emitted == []
+    assert updates and updates[0]["active"] is False
+
+
+def test_stop_hook_blocks_archive_ready_until_repo_is_clean_and_published(monkeypatch, tmp_path):
+    context = SimpleNamespace(
+        skill_root=tmp_path,
+        session_is_managed=True,
+        has_active_artifacts=True,
+        payload={"stop_hook_active": False},
+        transcript_path=tmp_path / "session.jsonl",
+        repo=tmp_path,
+        opt_in_env=False,
+        artifacts=SimpleNamespace(
+            results_path=tmp_path / "research-results.tsv",
+            state_path=tmp_path / "autoresearch-state.json",
+            launch_path=None,
+            runtime_path=None,
+        ),
+    )
+
+    emitted: list[str] = []
+    updates: list[dict[str, object]] = []
+    monkeypatch.setattr(hook_stop, "build_context", lambda _: context)
+    monkeypatch.setattr(hook_stop, "run_supervisor", lambda _: {"decision": "stop"})
+    monkeypatch.setattr(
+        hook_stop,
+        "load_last_task_complete_message",
+        lambda transcript_path: "Done.\n\n**THREAD COMPLETE. READY FOR ARCHIVE.**",
+    )
+    monkeypatch.setattr(hook_stop, "archive_readiness_blockers", lambda _: ["Branch is not pushed."])
+    monkeypatch.setattr(hook_stop, "emit_block", emitted.append)
+    monkeypatch.setattr(hook_stop, "update_hook_context_pointer", lambda **kwargs: updates.append(kwargs))
+
+    assert hook_stop.main() == 0
+    assert emitted and "Do not mark the thread archive-ready yet." in emitted[0]
+    assert updates == []
+
+
+def test_hook_install_keeps_legacy_compat_shims(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
+
+    payload = hooks_ctl.install()
+
+    assert payload["managed_scripts_present"] is True
+    assert payload["legacy_compat_present"] is True
+    assert hooks_ctl.start_script_path().exists()
+    assert hooks_ctl.stop_script_path().exists()
+    assert hooks_ctl.legacy_start_script_path().exists()
+    assert hooks_ctl.legacy_stop_script_path().exists()
+    assert "hooks-runtime" in hooks_ctl.legacy_stop_script_path().read_text(encoding="utf-8")
+
+    hooks_ctl.uninstall()

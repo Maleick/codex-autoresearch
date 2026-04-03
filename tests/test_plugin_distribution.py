@@ -42,7 +42,7 @@ SELF_IMPROVEMENT_PARITY_FILES = {
         "--memory-path",
         "Optional reusable memory input path",
     ],
-    "scripts/autoresearch_hook_session_start.py": [
+    "scripts/hook_start.py": [
         "autoresearch-memory.md",
     ],
 }

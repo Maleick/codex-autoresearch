@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
 from typing import Any
 
-HOOK_CONTEXT_VERSION = 1
-HOOK_CONTEXT_NAME = "autoresearch-hook-context.json"
+HOOK_POINTER_VERSION = 1
+HOOK_POINTER_NAME = "autoresearch-hook-context.json"
 SESSION_MODE_CHOICES = ("foreground", "background")
 UNSET = object()
 
 
 @dataclass(frozen=True)
-class HookContextPointer:
+class HookRuntimePointer:
     version: int
     active: bool
     session_mode: str | None
@@ -25,7 +25,7 @@ class HookContextPointer:
     updated_at: str | None
 
 
-class HookContextError(Exception):
+class HookRuntimeError(Exception):
     pass
 
 
@@ -57,8 +57,8 @@ def find_repo_root(start: Path | None = None) -> Path:
     return current
 
 
-def default_hook_context_path(cwd: Path | None = None) -> Path:
-    return find_repo_root(cwd) / HOOK_CONTEXT_NAME
+def default_hook_runtime_path(cwd: Path | None = None) -> Path:
+    return find_repo_root(cwd) / HOOK_POINTER_NAME
 
 
 def _normalize_repo(repo: Path | None) -> Path:
@@ -86,7 +86,7 @@ def deserialize_pointer_path(repo: Path, raw: Any) -> Path | None:
     if raw in (None, ""):
         return None
     if not isinstance(raw, str):
-        raise HookContextError(f"Invalid hook context path: {raw!r}")
+        raise HookRuntimeError(f"Invalid hook context path: {raw!r}")
     candidate = Path(raw).expanduser()
     if not candidate.is_absolute():
         candidate = repo / candidate
@@ -105,10 +105,10 @@ def pointer_payload(
     updated_at: str | None = None,
 ) -> dict[str, Any]:
     if session_mode is not None and session_mode not in SESSION_MODE_CHOICES:
-        raise HookContextError(f"Unsupported session mode for hook context: {session_mode}")
+        raise HookRuntimeError(f"Unsupported session mode for hook context: {session_mode}")
     normalized_repo = _normalize_repo(repo)
     return {
-        "version": HOOK_CONTEXT_VERSION,
+        "version": HOOK_POINTER_VERSION,
         "active": bool(active),
         "session_mode": session_mode,
         "results_path": serialize_pointer_path(normalized_repo, results_path),
@@ -131,7 +131,7 @@ def write_hook_context_pointer(
     updated_at: str | None = None,
 ) -> Path:
     normalized_repo = _normalize_repo(repo)
-    path = default_hook_context_path(normalized_repo)
+    path = default_hook_runtime_path(normalized_repo)
     payload = pointer_payload(
         repo=normalized_repo,
         active=active,
@@ -146,9 +146,9 @@ def write_hook_context_pointer(
     return path
 
 
-def load_hook_context_pointer(repo: Path | None) -> HookContextPointer | None:
+def load_hook_context_pointer(repo: Path | None) -> HookRuntimePointer | None:
     normalized_repo = _normalize_repo(repo)
-    path = default_hook_context_path(normalized_repo)
+    path = default_hook_runtime_path(normalized_repo)
     if not path.exists():
         return None
     try:
@@ -157,7 +157,7 @@ def load_hook_context_pointer(repo: Path | None) -> HookContextPointer | None:
         return None
     if not isinstance(payload, dict):
         return None
-    if payload.get("version") != HOOK_CONTEXT_VERSION:
+    if payload.get("version") != HOOK_POINTER_VERSION:
         return None
     active = payload.get("active")
     if not isinstance(active, bool):
@@ -166,8 +166,8 @@ def load_hook_context_pointer(repo: Path | None) -> HookContextPointer | None:
     if session_mode is not None and session_mode not in SESSION_MODE_CHOICES:
         return None
     try:
-        return HookContextPointer(
-            version=HOOK_CONTEXT_VERSION,
+        return HookRuntimePointer(
+            version=HOOK_POINTER_VERSION,
             active=active,
             session_mode=session_mode,
             results_path=deserialize_pointer_path(normalized_repo, payload.get("results_path")),
@@ -176,7 +176,7 @@ def load_hook_context_pointer(repo: Path | None) -> HookContextPointer | None:
             runtime_path=deserialize_pointer_path(normalized_repo, payload.get("runtime_path")),
             updated_at=payload.get("updated_at") if isinstance(payload.get("updated_at"), str) else None,
         )
-    except HookContextError:
+    except HookRuntimeError:
         return None
 
 
@@ -221,3 +221,8 @@ def update_hook_context_pointer(
         launch_path=resolved_launch,
         runtime_path=resolved_runtime,
     )
+
+
+HookContextPointer = HookRuntimePointer
+HookContextError = HookRuntimeError
+default_hook_context_path = default_hook_runtime_path
