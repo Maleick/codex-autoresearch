@@ -27,6 +27,35 @@ from scripts.autoresearch_helpers import (
 from scripts.autoresearch_runtime_ctl import command_complete, command_launch
 
 
+def _append_many_iterations(
+    *,
+    repo: str,
+    count: int,
+    decision: str = "discard",
+    verify_status: str = "pass",
+    guard_status: str = "skip",
+    metric_value: str = "10",
+) -> dict:
+    state: dict | None = None
+    for index in range(count):
+        state = append_iteration(
+            repo=repo,
+            results_path_value=None,
+            state_path_value=None,
+            decision=decision,
+            metric_value=metric_value,
+            verify_status=verify_status,
+            guard_status=guard_status,
+            hypothesis=f"iteration-{index}",
+            change_summary=f"change-{index}",
+            labels=["retry"],
+            note=None,
+            iteration=None,
+        )
+    assert state is not None
+    return state
+
+
 def test_initialize_run_creates_state_and_results(tmp_path):
     repo = str(tmp_path)
     config = RunConfig(
@@ -1213,6 +1242,232 @@ def test_supervisor_snapshot_backfills_pool_for_older_state_files(tmp_path):
 
     assert snapshot["subagent_pool"]["kind"] == "autoresearch_subagent_pool"
     assert snapshot["continuation_policy"]["approval_boundary"] == "pre_launch"
+
+
+def test_hardening_checkpoint_is_emitted_on_tenth_iteration(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Harden the loop",
+        metric="failing checks",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+
+    state = _append_many_iterations(repo=repo, count=10)
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert state["stats"]["hardening_checkpoints"] == 1
+    assert state["hardening_checkpoints"]
+    assert state["hardening_checkpoints"][-1]["iteration"] == 10
+    assert state["hardening_checkpoints"][-1]["protocol_fingerprint_match"] is True
+    assert state["hardening_eligible_iterations"][-1] == 10
+    assert state["stats"]["hardening_history"][-1]["iteration"] == 10
+    assert snapshot["hardening_checkpoints"][-1]["iteration"] == 10
+    assert snapshot["hardening_checkpoint_status"]["status"] == "passed"
+    assert snapshot["iteration_analytics"]["evidence_quality_trend"]
+
+
+def test_supervisor_snapshot_emits_refine_after_three_refinement_signals(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Reduce flaky tests",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+
+    _append_many_iterations(repo=repo, count=3, decision="discard", verify_status="pass", guard_status="skip")
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["decision"] == "relaunch"
+    assert snapshot["reason"] == "refine_signal"
+    assert snapshot["subagent_guidance"]["recommended_action"] == "narrow_scope_or_retry"
+    assert snapshot["subagent_guidance"]["escalation"]["ready_action"] == "REFINE"
+    assert snapshot["subagent_guidance"]["escalation"]["recent_signals"][-3:] == [
+        "refine",
+        "refine",
+        "refine",
+    ]
+
+
+def test_supervisor_snapshot_requires_public_research_after_second_pivot(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Recover from regressions",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+
+    state = _append_many_iterations(repo=repo, count=10, decision="discard", verify_status="fail", guard_status="skip")
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["decision"] == "relaunch"
+    assert snapshot["reason"] == "web_search_required"
+    assert snapshot["subagent_guidance"]["recommended_action"] == "launch_public_research"
+    assert snapshot["subagent_guidance"]["escalation"]["ready_action"] == "WEB_SEARCH"
+    assert state["stats"]["web_research_forced_count"] == 1
+    assert state["stats"]["pivots_without_progress"] == 2
+
+
+def test_supervisor_snapshot_requests_human_after_third_pivot_without_progress(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Recover from regressions",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest",
+        mode="background",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+
+    state = _append_many_iterations(repo=repo, count=15, decision="discard", verify_status="fail", guard_status="skip")
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["decision"] == "needs_human"
+    assert snapshot["reason"] == "escalation_hard_stop"
+    assert snapshot["subagent_guidance"]["recommended_action"] == "pause_pool"
+    assert snapshot["subagent_guidance"]["escalation"]["ready_action"] == "HARD_STOP"
+    assert snapshot["subagent_guidance"]["escalation"]["pivots_without_progress"] == 3
+    assert state["flags"]["needs_human"] is True
+    assert snapshot["subagent_guidance"]["escalation"]["counts"]["hard_stop"] == 1
+
+
+def test_legacy_state_backfill_restores_hardening_and_research_defaults(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Backfill legacy state",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest",
+        mode="foreground",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("protocol", None)
+    payload.pop("public_research_harvest", None)
+    payload.pop("continuation_policy", None)
+    payload["stats"].pop("hardening_checkpoints", None)
+    payload["stats"].pop("hardening_history", None)
+    payload["stats"].pop("evidence_quality_history", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    snapshot = build_supervisor_snapshot(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+    )
+
+    assert snapshot["continuation_policy"]["hardening_checkpoint_interval"] == 10
+    assert snapshot["continuation_policy"]["escalation"]["window"] == 10
+    assert snapshot["protocol"]["version"] == "v2"
+    assert snapshot["subagent_pool"]["fallback_policy"]["mode"] == "deterministic_role_order"
+    assert snapshot["public_research_harvest"]
+    assert snapshot["stats"]["evidence_quality_history"] == []
+    assert snapshot["stats"]["escalation_counts"] == {
+        "refine": 0,
+        "pivot": 0,
+        "web": 0,
+        "hard_stop": 0,
+    }
+
+
+def test_append_iteration_materializes_defaults_for_legacy_state(tmp_path):
+    repo = str(tmp_path)
+    config = RunConfig(
+        goal="Append on legacy state",
+        metric="failing tests",
+        direction="lower",
+        verify="pytest",
+        mode="foreground",
+    )
+    initialize_run(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        config=config,
+        fresh_start=False,
+    )
+    state_path = resolve_path(repo, None, "autoresearch-state.json")
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload.pop("protocol", None)
+    payload.pop("public_research_harvest", None)
+    payload.pop("hardening_checkpoints", None)
+    payload["stats"].pop("evidence_quality_history", None)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    state = append_iteration(
+        repo=repo,
+        results_path_value=None,
+        state_path_value=None,
+        decision="discard",
+        metric_value="10",
+        verify_status="pass",
+        guard_status="skip",
+        hypothesis="legacy",
+        change_summary="legacy append",
+        labels=["legacy"],
+        note=None,
+        iteration=None,
+    )
+
+    assert state["protocol"]["version"] == "v2"
+    assert state["public_research_harvest"]
+    assert isinstance(state["stats"]["evidence_quality_history"], list)
+    assert state["stats"]["total_iterations"] == 1
 
 
 @pytest.mark.parametrize(

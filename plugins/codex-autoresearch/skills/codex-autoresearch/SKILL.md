@@ -40,6 +40,9 @@ The main agent is the orchestrator. Subagents are the standing execution pool.
 - Keep the local bundle narrower than the reference repo: use the compact references and helpers in this repository instead of expanding into a larger specialist surface unless the user asks for it.
 - The main agent owns the final decision, the edit, and the run state.
 - Approval belongs before launch. After launch, continue by default unless the user stops the run, the configured stop condition is reached, or a real `needs_human` blocker appears.
+- Run a hardening checkpoint every 10 completed iterations with a protocol fingerprint and continuity audit.
+- Use the escalation ladder: `REFINE` after repeated refinement signals, `PIVOT` after sustained regressions, forced public research after repeated pivots, then hard-stop for human review if progress still stalls.
+- Include a public research harvest section in run summaries when external repositories materially informed the next step.
 
 ## Required Internal Fields
 

@@ -22,6 +22,7 @@ After each completed iteration, report:
 - decision (`keep`, `discard`, or `needs_human`)
 - short explanation
 - current best-known metric, if available
+- escalation state, if one is active
 
 ## Completion Summary
 
@@ -32,3 +33,5 @@ When the run ends, report:
 - kept vs discarded counts
 - best recorded metric, if available
 - next action, if a blocker remains
+- hardening checkpoint status
+- public research harvest references when a web/research pass informed the run

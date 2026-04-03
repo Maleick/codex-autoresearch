@@ -14,6 +14,10 @@
 - `stats`: total iterations, keep/discard counters, best iteration, and discard streak
 - `flags`: stop request, needs-human marker, and background activity
 - `last_iteration`: summary of the latest completed iteration
+- `protocol`: protocol fingerprint, version, and continuity anchors for the current loop contract
+- `hardening_checkpoints`: every-10-iteration checkpoint payloads with continuity and evidence audits
+- `public_research_harvest`: similar public repositories consulted plus adopted/rejected patterns and rationale
+- `escalation`: rolling signals, trigger counts, latest action, and action history
 
 ## Rules
 
@@ -25,6 +29,9 @@
 6. Set `flags.needs_human=true` when autonomous progress should stop for user input.
 7. For detached runs, `flags.background_active` reflects whether a background owner is currently expected to continue the loop.
 8. If the pool metadata is missing from an older state file, reconstruct it from the goal, scope, and mode before resuming.
+9. Backfill older state files defensively: preserve existing fields and append missing defaults for protocol, escalation, hardening, and research metadata.
+10. Emit a hardening checkpoint every 10 completed iterations.
+11. Keep escalation counters, web-pivot usage, and stop-reason distribution machine-readable for later trend analysis.
 
 ## Resume Semantics
 

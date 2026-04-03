@@ -15,11 +15,13 @@ For each iteration:
 
 1. Re-state the goal, scope, metric, verify command, and current subagent assignments.
 2. Use the standing subagent pool to gather context, challenge the leading hypothesis, and surface verification gaps.
-3. Make one focused change.
-4. Run verify and guard commands.
-5. Feed subagent findings back into the next iteration plan.
-6. Keep or discard the experiment.
-7. Record the outcome with `scripts/autoresearch_record_iteration.py`.
+3. Keep explicit coordinator, protocol, implementation, validation, and evidence coverage. In `max_parallelism` mode, add reviewer/synthesis coverage when available.
+4. Make one focused change.
+5. Run verify and guard commands.
+6. Feed subagent findings back into the next iteration plan.
+7. Keep or discard the experiment.
+8. Record the outcome with `scripts/autoresearch_record_iteration.py`.
+9. Every 10 iterations, emit a hardening checkpoint with a protocol fingerprint and continuity audit.
 
 ## Phase 3: Decide
 
@@ -29,6 +31,13 @@ Stop when:
 - the user requests stop
 - the iteration cap is reached
 - the run genuinely needs human input
+
+Escalation ladder:
+
+- 3 refinement-required signals in the rolling window: emit `REFINE`
+- 5 failures or consecutive regressions: emit `PIVOT`
+- 2 pivots without progress: force a public research pass
+- 3 pivots without progress: stop and request human review
 
 Once the user approves launch, continue by default until one of those stop conditions is true. Do not restart the approval cycle on every pass; re-anchor the same standing pool and keep iterating.
 

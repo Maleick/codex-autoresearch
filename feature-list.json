@@ -108,5 +108,18 @@
       "Hook and contract tests verify the post-launch continuation wording and the orchestrator-only state/result ownership rules"
     ],
     "notes": "Adds a concrete subagent-pool planner plus helper/runtime metadata so the skill can stay subagent-first without relying on prose alone."
+  },
+  {
+    "id": "hardening_sprint_protocol",
+    "name": "10-iteration hardening cadence, escalation ladder, and public research harvest",
+    "status": "complete",
+    "acceptance_tests": [
+      "A run emits a hardening checkpoint every 10 completed iterations with a protocol fingerprint and continuity audit",
+      "Escalation thresholds trigger REFINE, recurring PIVOT, forced web research, and hard-stop behavior at the configured boundaries",
+      "State loading backfills new protocol, escalation, and research fields without breaking older artifacts",
+      "The standing pool exposes deterministic max-parallel routing, fallback ordering, and duplicate-output handling",
+      "Run summaries expose evidence trends, escalation state, and the top public research repositories consulted"
+    ],
+    "notes": "Tracks the throughput-oriented hardening sprint that adds richer continuation controls, public-research comparability, and stronger observability while preserving backward compatibility."
   }
 ]

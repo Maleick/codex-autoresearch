@@ -10,6 +10,15 @@ from typing import Any
 
 
 ROLE_LIMIT = 6
+MAX_PARALLELISM_MARKERS = ("parallel", "max_parallelism", "max-parallel", "high_throughput", "high throughput", "batch")
+SUBAGENT_ROLE_INTENTS = (
+    "protocol",
+    "evidence",
+    "implementation",
+    "validation",
+    "synthesis",
+    "risk",
+)
 WHITESPACE_RE = re.compile(r"\s+")
 RESOURCE_TIERS: dict[str, tuple[str, ...]] = {
     "lite": ("orchestrator", "scout", "verifier"),
@@ -27,6 +36,7 @@ class RoleTemplate:
     role_id: str
     name: str
     focus: str
+    intent: str = "evidence"
     triggers: tuple[str, ...] = ()
 
 
@@ -35,26 +45,31 @@ BASE_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
         "orchestrator",
         "Orchestrator",
         "Keep the goal, scope, and mode aligned; route work and merge results.",
+        "protocol",
     ),
     RoleTemplate(
         "scout",
         "Scout",
         "Locate the relevant files, docs, commands, and prior context in the repo.",
+        "evidence",
     ),
     RoleTemplate(
         "analyst",
         "Analyst",
         "Turn evidence into options, tradeoffs, and a clear next-step recommendation.",
+        "implementation",
     ),
     RoleTemplate(
         "verifier",
         "Verifier",
         "Check claims with commands, tests, or log reads before the pool settles.",
+        "validation",
     ),
     RoleTemplate(
         "synthesizer",
         "Synthesizer",
         "Condense the best evidence into a stable summary the orchestrator can reuse.",
+        "synthesis",
     ),
 )
 
@@ -63,24 +78,28 @@ SPECIAL_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
         "security_reviewer",
         "Security Reviewer",
         "Look for safety, abuse, auth, and data-handling risks.",
+        "risk",
         ("security", "vuln", "threat", "auth", "permission", "secret", "pii", "compliance"),
     ),
     RoleTemplate(
         "debugger",
         "Debugger",
         "Reproduce failures, isolate causes, and narrow the repair path.",
+        "implementation",
         ("debug", "fix", "bug", "error", "fail", "failing", "broken", "crash", "regression"),
     ),
     RoleTemplate(
         "release_guard",
         "Release Guard",
         "Check ship-readiness, rollout risk, and user-visible regressions.",
+        "risk",
         ("ship", "release", "deploy", "rollout", "publish", "handoff"),
     ),
     RoleTemplate(
         "research_tracker",
         "Research Tracker",
         "Collect background, comparisons, and scenario coverage for the loop.",
+        "evidence",
         ("learn", "research", "predict", "scenario", "compare", "baseline"),
     ),
 )
@@ -147,6 +166,13 @@ def choose_resource_tier(
     )
 
 
+def choose_execution_profile(goal: str, scope: str | None, mode: str, special_role: RoleTemplate | None) -> str:
+    normalized = " ".join(part for part in (goal, scope or "", mode, special_role.name if special_role else "") if part).lower()
+    if mode == "background" or any(marker in normalized for marker in MAX_PARALLELISM_MARKERS):
+        return "max_parallelism"
+    return "standard"
+
+
 def build_active_role_ids(
     *,
     resource_tier: str,
@@ -192,6 +218,7 @@ def build_reanchor_checklist() -> list[str]:
         "Summarize the latest kept or discarded iteration before asking the pool for more work.",
         "Reuse the current role ownership unless drift, timeout, or repeated discards force a reset.",
         "Ask non-orchestrator roles for evidence, objections, verification, and one next-step recommendation.",
+        "When duplicate outputs appear repeatedly, ask roles to provide deduplicated findings before the next change.",
     ]
 
 
@@ -200,6 +227,7 @@ def build_handoff_contract() -> list[str]:
         "Only the orchestrator records iterations or mutates autoresearch-state.json.",
         "Non-orchestrator roles return evidence, objections, verification results, and concise recommendations.",
         "Keep the pool stable across iterations; replace or drop roles only when they stop adding value.",
+        "When conflicts appear, apply roles in strict intent order: protocol -> implementation -> validation -> evidence.",
     ]
 
 
@@ -215,6 +243,7 @@ def template_to_role(
         "id": template.role_id,
         "name": template.name,
         "focus": template.focus,
+        "intent": template.intent,
         "active_by_default": template.role_id in active_role_ids,
         "handoff_prompt": build_role_handoff_prompt(
             template=template,
@@ -222,6 +251,20 @@ def template_to_role(
             scope=scope,
             mode=mode,
         ),
+    }
+
+
+def build_iteration_assignments(templates: list[RoleTemplate]) -> dict[str, str]:
+    by_intent: dict[str, str] = {}
+    for template in templates:
+        by_intent.setdefault(template.intent, template.role_id)
+    return {
+        "coordinator": by_intent.get("protocol", "orchestrator"),
+        "protocol": by_intent.get("protocol", "orchestrator"),
+        "implementation": by_intent.get("implementation", "analyst"),
+        "evidence": by_intent.get("evidence", "scout"),
+        "validation": by_intent.get("validation", "verifier"),
+        "reviewer": by_intent.get("synthesis", by_intent.get("risk", "synthesizer")),
     }
 
 
@@ -242,6 +285,7 @@ def build_subagent_pool_plan(
         normalized_mode,
         special_role,
     )
+    execution_profile = choose_execution_profile(normalized_goal, normalized_scope, normalized_mode, special_role)
     active_role_ids = build_active_role_ids(
         resource_tier=resource_tier,
         special_role=special_role,
@@ -277,13 +321,37 @@ def build_subagent_pool_plan(
         "orchestrator_role_id": "orchestrator",
         "state_owner": "orchestrator",
         "fallback_mode": "serial",
+        "execution_profile": execution_profile,
+        "mode_profiles": {
+            "standard": {
+                "target_parallel_branches": max(2, len(active_role_ids) - 1),
+                "allow_role_reuse_when_context_similarity_high": True,
+            },
+            "max_parallelism": {
+                "target_parallel_branches": min(ROLE_LIMIT, max(4, len(active_role_ids))),
+                "allow_role_reuse_when_context_similarity_high": True,
+            },
+        },
+        "deduplication": {
+            "require_unique_evidence_for_repeat_discards": True,
+            "duplicate_window": 2,
+        },
         "resource_tier": resource_tier,
         "recommended_active_role_ids": active_role_ids,
+        "iteration_assignments": build_iteration_assignments(templates),
+        "role_intent_routing": [
+            {"intent": template.intent, "role_id": template.role_id}
+            for template in templates
+        ],
         "activation": {
             "during_setup": resource_tier != "lite",
             "during_iterations": True,
             "during_resume": True,
             "reason": activation_reason,
+        },
+        "fallback_policy": {
+            "mode": "deterministic_role_order",
+            "ordered_role_ids": [template.role_id for template in templates],
         },
         "handoff_contract": build_handoff_contract(),
         "reanchor_checklist": build_reanchor_checklist(),

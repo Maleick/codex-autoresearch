@@ -19,10 +19,18 @@ Use this reference when a run should be subagent-first.
 ## Pool Rules
 
 - Keep the pool alive across iterations unless context drift forces a reset.
-- Reuse roles where possible so context compounds instead of resetting.
+- Reuse roles where possible so context compounds instead of resetting, but only reuse heavily when the new task is highly similar to the previous context.
 - Prefer a small pool with distinct jobs over one-off ad hoc spawning.
 - Re-anchor the pool after every keep/discard decision with the latest goal, state, and results.
 - Feed findings back into the loop before the next code change.
+- Route conflicts in strict intent order: protocol, implementation, validation, then evidence.
+- When repeated discards produce overlapping outputs, ask the pool for deduplicated evidence before the next change.
+
+## Iteration Mix
+
+- Every iteration should have a coordinator role plus explicit protocol, implementation, validation, and evidence coverage.
+- In `max_parallelism` mode, prefer more concurrent branches per iteration and keep a reviewer or synthesizer active when budget allows.
+- Default reviewer coverage belongs to the synthesizer or another summary/risk role when one is active.
 
 ## State Ownership
 
@@ -35,6 +43,7 @@ Use this reference when a run should be subagent-first.
 - If one subagent times out, conflicts with another role, or stops adding value, replace or drop that role without stopping the whole run.
 - If the whole pool becomes unhelpful, continue serially under the orchestrator instead of rerunning setup.
 - Only surface `needs_human` when the orchestrator cannot continue safely after folding in the latest pool findings.
+- When role or mode conflicts appear, fall back to the deterministic standing-role order instead of improvising a new ordering mid-run.
 
 ## Local Scope
 
