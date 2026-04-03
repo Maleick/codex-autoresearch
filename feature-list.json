@@ -116,8 +116,9 @@
     "acceptance_tests": [
       "Installer migrates the managed hook package to ~/.codex/hooks-runtime and rewrites hooks.json to the new start/stop script names",
       "Stop hook continues on supervisor relaunch and tailors the block prompt from the latest task_complete Next step/Next steps section",
-      "State-driven stop and needs_human decisions still terminate even when the final response includes Next step text"
+      "State-driven stop and needs_human decisions still terminate even when the final response includes Next step text",
+      "Archive-ready responses are blocked until the repo is clean, pushed, and PR'd when working on a non-default branch"
     ],
-    "notes": "Renamed the managed hook modules to generic start/stop/common/context names, kept the state supervisor as the hard stop authority, and added transcript-based Next step continuation prompts."
+    "notes": "Renamed the managed hook modules to generic start/stop/common/context names, kept the state supervisor as the hard stop authority, added transcript-based Next step continuation prompts, and added archive-readiness git/publication guards."
   }
 ]

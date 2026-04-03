@@ -7,6 +7,7 @@ from scripts import autoresearch_hooks_ctl as hooks_ctl
 from scripts.hook_common import (
     extract_next_steps_block,
     load_last_task_complete_message,
+    message_declares_archive_ready,
     next_steps_has_multiple_options,
     next_steps_mentions_recommendation,
 )
@@ -16,6 +17,8 @@ from scripts import hook_stop
 from scripts.hook_stop import (
     CONTINUATION_PROMPT,
     FOLLOWUP_CONTINUATION_PROMPT,
+    archive_readiness_blockers,
+    build_archive_guard_prompt,
     build_continuation_prompt,
 )
 
@@ -106,6 +109,38 @@ def test_build_continuation_prompt_uses_recommended_or_default_language():
     assert "Final next step(s):" in recommended_prompt
 
 
+def test_message_declares_archive_ready_matches_completion_signal():
+    message = "Summary\n\n**THREAD COMPLETE. READY FOR ARCHIVE.**"
+
+    assert message_declares_archive_ready(message) is True
+    assert message_declares_archive_ready("Summary only") is False
+
+
+def test_archive_readiness_blockers_report_dirty_unpushed_branch(monkeypatch, tmp_path):
+    context = SimpleNamespace(repo=tmp_path)
+    monkeypatch.setattr(hook_stop, "git_status_entries", lambda repo: [" M scripts/hook_stop.py"])
+    monkeypatch.setattr(hook_stop, "current_branch_name", lambda repo: "codex/test")
+    monkeypatch.setattr(hook_stop, "default_branch_name", lambda repo: "main")
+    monkeypatch.setattr(hook_stop, "branch_has_upstream", lambda repo: True)
+    monkeypatch.setattr(hook_stop, "ahead_of_upstream_count", lambda repo: 2)
+    monkeypatch.setattr(hook_stop, "github_repo_name", lambda repo: "Maleick/codex-autoresearch")
+    monkeypatch.setattr(hook_stop, "branch_has_open_or_merged_pr", lambda repo, repo_name: False)
+
+    blockers = archive_readiness_blockers(context)
+
+    assert any("uncommitted changes" in blocker for blocker in blockers)
+    assert any("unpushed commit" in blocker for blocker in blockers)
+    assert any("pull request" in blocker for blocker in blockers)
+
+
+def test_build_archive_guard_prompt_lists_blockers():
+    prompt = build_archive_guard_prompt(["Working tree still has uncommitted changes."])
+
+    assert "Do not mark the thread archive-ready yet." in prompt
+    assert "Archive blockers:" in prompt
+    assert "- Working tree still has uncommitted changes." in prompt
+
+
 def test_stop_hook_state_decision_wins_over_next_steps(monkeypatch, tmp_path):
     context = SimpleNamespace(
         skill_root=tmp_path,
@@ -133,6 +168,41 @@ def test_stop_hook_state_decision_wins_over_next_steps(monkeypatch, tmp_path):
     assert hook_stop.main() == 0
     assert emitted == []
     assert updates and updates[0]["active"] is False
+
+
+def test_stop_hook_blocks_archive_ready_until_repo_is_clean_and_published(monkeypatch, tmp_path):
+    context = SimpleNamespace(
+        skill_root=tmp_path,
+        session_is_managed=True,
+        has_active_artifacts=True,
+        payload={"stop_hook_active": False},
+        transcript_path=tmp_path / "session.jsonl",
+        repo=tmp_path,
+        opt_in_env=False,
+        artifacts=SimpleNamespace(
+            results_path=tmp_path / "research-results.tsv",
+            state_path=tmp_path / "autoresearch-state.json",
+            launch_path=None,
+            runtime_path=None,
+        ),
+    )
+
+    emitted: list[str] = []
+    updates: list[dict[str, object]] = []
+    monkeypatch.setattr(hook_stop, "build_context", lambda _: context)
+    monkeypatch.setattr(hook_stop, "run_supervisor", lambda _: {"decision": "stop"})
+    monkeypatch.setattr(
+        hook_stop,
+        "load_last_task_complete_message",
+        lambda transcript_path: "Done.\n\n**THREAD COMPLETE. READY FOR ARCHIVE.**",
+    )
+    monkeypatch.setattr(hook_stop, "archive_readiness_blockers", lambda _: ["Branch is not pushed."])
+    monkeypatch.setattr(hook_stop, "emit_block", emitted.append)
+    monkeypatch.setattr(hook_stop, "update_hook_context_pointer", lambda **kwargs: updates.append(kwargs))
+
+    assert hook_stop.main() == 0
+    assert emitted and "Do not mark the thread archive-ready yet." in emitted[0]
+    assert updates == []
 
 
 def test_hook_install_keeps_legacy_compat_shims(monkeypatch, tmp_path):

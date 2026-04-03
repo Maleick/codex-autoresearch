@@ -351,6 +351,12 @@ def next_steps_mentions_recommendation(next_steps: str | None) -> bool:
     return bool(RECOMMENDED_PATTERN.search(next_steps))
 
 
+def message_declares_archive_ready(message: str | None) -> bool:
+    if not isinstance(message, str) or not message.strip():
+        return False
+    return any(ARCHIVE_READY_PATTERN.match(line) for line in message.splitlines())
+
+
 def build_context(script_path: str | Path) -> ManagedHookContext | None:
     payload = load_input()
     cwd_value = payload.get("cwd")
