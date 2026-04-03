@@ -366,7 +366,44 @@ def install_managed_scripts() -> None:
     shutil.copy2(source_stop_script(), stop_script_path())
 
 
-def cleanup_legacy_install() -> None:
+def legacy_wrapper_content(*, target_name: str, label: str) -> str:
+    return (
+        "from __future__ import annotations\n\n"
+        "import runpy\n"
+        "import sys\n"
+        "from pathlib import Path\n\n\n"
+        "def main() -> int:\n"
+        f'    target = Path(__file__).resolve().parents[1] / "hooks-runtime" / "{target_name}"\n'
+        "    if not target.exists():\n"
+        f'        raise SystemExit(f"Missing managed {label} hook target: {{target}}")\n'
+        "    sys.path.insert(0, str(target.parent))\n"
+        "    runpy.run_path(str(target), run_name=\"__main__\")\n"
+        "    return 0\n\n\n"
+        "if __name__ == \"__main__\":\n"
+        "    raise SystemExit(main())\n"
+    )
+
+
+def install_legacy_compat_shims() -> None:
+    legacy_hooks_home().mkdir(parents=True, exist_ok=True)
+    write_text_with_backup(
+        legacy_start_script_path(),
+        legacy_wrapper_content(target_name=START_SCRIPT_NAME, label="session-start"),
+    )
+    write_text_with_backup(
+        legacy_stop_script_path(),
+        legacy_wrapper_content(target_name=STOP_SCRIPT_NAME, label="stop"),
+    )
+    for stale_path in (
+        legacy_common_script_path(),
+        legacy_context_script_path(),
+        legacy_manifest_path(),
+    ):
+        if stale_path.exists():
+            stale_path.unlink()
+
+
+def remove_legacy_install() -> None:
     shutil.rmtree(legacy_hooks_home(), ignore_errors=True)
 
 
@@ -396,6 +433,10 @@ def status() -> dict[str, Any]:
             and context_script_path().exists()
             and start_script_path().exists()
             and stop_script_path().exists()
+        ),
+        "legacy_compat_present": (
+            legacy_start_script_path().exists()
+            and legacy_stop_script_path().exists()
         ),
         "manifest_present": manifest_path().exists(),
         "skill_root_fallback": manifest.get("skill_root_fallback") or str(current_skill_root()),
@@ -469,7 +510,7 @@ def install() -> dict[str, Any]:
         json.dumps(payload, indent=2) + "\n",
     )
     write_manifest(feature_enabled_by_installer=feature_enabled_by_installer)
-    cleanup_legacy_install()
+    install_legacy_compat_shims()
 
     current = status()
     current["config_backup"] = config_backup
@@ -537,7 +578,7 @@ def uninstall() -> dict[str, Any]:
             hooks_home().rmdir()
         except OSError:
             pass
-    cleanup_legacy_install()
+    remove_legacy_install()
 
     current = status()
     current["config_backup"] = config_backup

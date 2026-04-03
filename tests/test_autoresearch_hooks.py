@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+from scripts import autoresearch_hooks_ctl as hooks_ctl
 from scripts.hook_common import (
     extract_next_steps_block,
     load_last_task_complete_message,
@@ -132,3 +133,19 @@ def test_stop_hook_state_decision_wins_over_next_steps(monkeypatch, tmp_path):
     assert hook_stop.main() == 0
     assert emitted == []
     assert updates and updates[0]["active"] is False
+
+
+def test_hook_install_keeps_legacy_compat_shims(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
+
+    payload = hooks_ctl.install()
+
+    assert payload["managed_scripts_present"] is True
+    assert payload["legacy_compat_present"] is True
+    assert hooks_ctl.start_script_path().exists()
+    assert hooks_ctl.stop_script_path().exists()
+    assert hooks_ctl.legacy_start_script_path().exists()
+    assert hooks_ctl.legacy_stop_script_path().exists()
+    assert "hooks-runtime" in hooks_ctl.legacy_stop_script_path().read_text(encoding="utf-8")
+
+    hooks_ctl.uninstall()
