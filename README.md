@@ -64,6 +64,7 @@ By default the scripts manage these repo-root files:
 - `autoresearch-launch.json`
 
 These are intentionally uncommitted working artifacts. The helper scripts can also archive a previous run to `*.prev.*` when you request a fresh start.
+Operator handoff notes and local scratch files should stay outside the published repo surface and live in ignored local files such as `HANDOFF*.md`.
 
 For unattended runs, the bundle can also produce:
 
@@ -170,12 +171,6 @@ To refresh the installed plugin from GitHub after pushing a new release, re-open
 If a specific machine cannot install the GitHub-backed plugin directly, run `python3 scripts/bootstrap_local_plugin.py` to populate the supported machine-local fallback under `~/plugins`; see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 The plugin marketplace card text is sourced from `plugins/codex-autoresearch/.codex-plugin/plugin.json`, so keep that interface metadata aligned with the current README language when cutting a release.
-
-For a fresh plugin creation, use the scaffold script:
-
-```text
-python C:/Users/xmale/.codex/skills/.system/plugin-creator/scripts/create_basic_plugin.py codex-autoresearch --with-skills --with-marketplace
-```
 
 ## Design Differences From The Reference Repo
 

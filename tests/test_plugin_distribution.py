@@ -137,3 +137,12 @@ def test_distribution_validator_accepts_repo_snapshot() -> None:
 
 def test_sync_plugin_payload_reports_no_drift_for_repo_snapshot() -> None:
     assert collect_drift(REPO_ROOT) == []
+
+
+def test_private_handoff_notes_stay_out_of_public_release_surface() -> None:
+    gitignore_text = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    readme_text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "HANDOFF*.md" in gitignore_text
+    assert "C:/Users/" not in readme_text
+    assert "create_basic_plugin.py" not in readme_text
