@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1 - 2026-04-08
+
+- documented GitHub-backed plugin setup as the preferred multi-machine install path for Codex on macOS and Windows
+- clarified that the machine-local fallback exists only for environments that cannot refresh the GitHub-backed marketplace source
+- bumped the packaged plugin version so GitHub-backed installs have a clean release surface for the shared update path
+
 ## v1.1.0 - 2026-04-08
 
 - genericized the managed hook runtime into start/stop/common/context modules, kept legacy compatibility shims during migration, and blocked archive-ready completion until git/publication state is actually clean

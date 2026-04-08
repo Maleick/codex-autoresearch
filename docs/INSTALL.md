@@ -2,6 +2,14 @@
 
 `codex-autoresearch` can be used as a repo-managed skill during development or as the packaged plugin payload shipped from this repository.
 
+## Choose An Install Mode
+
+Use the install mode that matches how you want updates to flow:
+
+- Repo-managed skill: best for live development on one machine.
+- GitHub-backed plugin: best when you want the same plugin update path on multiple machines, including macOS and Windows.
+- Local fallback plugin: only for machines that cannot install or refresh the GitHub-backed plugin.
+
 ## Repo-Managed Skill
 
 Clone the repository and copy or symlink the root folder into your repo-managed skills location:
@@ -61,6 +69,35 @@ When maintaining the GitHub-backed plugin payload, use this workflow:
 4. Push to `main`.
 
 GitHub-backed installs resolve `plugins/codex-autoresearch` from `Maleick/codex-autoresearch@main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
+
+For a multi-machine setup, make the Codex marketplace on each machine point at the GitHub source instead of a machine-local `./plugins/...` source:
+
+```json
+{
+  "name": "codex-autoresearch",
+  "interface": {
+    "displayName": "Autoresearch Plugins"
+  },
+  "plugins": [
+    {
+      "name": "codex-autoresearch",
+      "source": {
+        "source": "github",
+        "repo": "Maleick/codex-autoresearch",
+        "path": "plugins/codex-autoresearch",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
+```
+
+With that marketplace name, enable `codex-autoresearch@codex-autoresearch` in `~/.codex/config.toml` on each machine, then reload Codex.
 
 For machine-local fallback setup when Codex cannot refresh GitHub-backed plugins, see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](LOCAL-FALLBACK-BOOTSTRAP.md).
 
