@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.0 - 2026-04-08
+
+- genericized the managed hook runtime into start/stop/common/context modules, kept legacy compatibility shims during migration, and blocked archive-ready completion until git/publication state is actually clean
+- pruned stale git metadata, removed the tracked Codex handoff document from the public repo surface, and ignore future `HANDOFF*.md` notes by default
+- tightened contributor guidance and packaging checks so host-specific/private handoff details stay out of release docs
+
 ## v1.0.4 - 2026-04-02
 
 - made the runtime operationally subagent-first with a standing-pool planner, persisted `subagent_pool` metadata, and a continuation policy shared across setup, state, launch, and status artifacts

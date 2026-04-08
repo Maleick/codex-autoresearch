@@ -39,6 +39,7 @@ GitHub-backed installs resolve `plugins/codex-autoresearch` from `main`, so plug
 
 - Keep `plugins/codex-autoresearch/.codex-plugin/plugin.json` aligned with the current feature surface.
 - Keep `.agents/plugins/marketplace.json` pointed at `Maleick/codex-autoresearch`.
+- Keep operator handoff notes and machine-local scratch files out of the published repo surface; use ignored local files such as `HANDOFF*.md` when you need private notes.
 - Leave optional icon, logo, or screenshot fields out of `plugin.json` until the referenced files exist.
 - Keep `hooks.json`, `.app.json`, and `.mcp.json` as valid JSON objects even when they are intentionally empty.
 

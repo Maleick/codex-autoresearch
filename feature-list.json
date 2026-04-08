@@ -120,5 +120,16 @@
       "Archive-ready responses are blocked until the repo is clean, pushed, and PR'd when working on a non-default branch"
     ],
     "notes": "Renamed the managed hook modules to generic start/stop/common/context names, kept the state supervisor as the hard stop authority, added transcript-based Next step continuation prompts, and added archive-readiness git/publication guards."
+  },
+  {
+    "id": "public_surface_hygiene",
+    "name": "Public release surface cleanup for handoff and host-specific artifacts",
+    "status": "complete",
+    "acceptance_tests": [
+      "Packaging validation passes after removing tracked handoff notes from the repo",
+      "Release-oriented tests fail if README reintroduces host-specific scaffold commands or the handoff ignore rule disappears",
+      "Contributor docs explain that private handoff notes should stay in ignored local files"
+    ],
+    "notes": "Removes the stale Codex handoff document from version control, ignores future HANDOFF files by default, and narrows the published docs to release-relevant instructions."
   }
 ]
