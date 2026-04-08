@@ -171,6 +171,7 @@ For shared Mac and Windows installs, prefer the GitHub-backed marketplace entry 
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
 If a specific machine cannot install the GitHub-backed plugin directly, run `python3 scripts/bootstrap_local_plugin.py` to populate the supported machine-local fallback under `~/plugins`; see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
+Pushes to `main` that change the packaged plugin version now also create a matching GitHub release tag automatically, so the Git-based release surface stays aligned with `plugins/codex-autoresearch/.codex-plugin/plugin.json`.
 The plugin marketplace card text is sourced from `plugins/codex-autoresearch/.codex-plugin/plugin.json`, so keep that interface metadata aligned with the current README language when cutting a release.
 
 ## Design Differences From The Reference Repo
