@@ -1,5 +1,16 @@
 [
   {
+    "id": "github_backed_multi_machine_distribution",
+    "name": "GitHub-backed multi-machine plugin distribution guidance",
+    "status": "complete",
+    "acceptance_tests": [
+      "Install docs show GitHub-backed marketplace configuration for multiple machines",
+      "Packaged plugin docs describe GitHub as the primary distribution path and local fallback as secondary",
+      "The packaged plugin version increments for the shared-update release"
+    ],
+    "notes": "Clarifies the preferred Codex distribution path so macOS and Windows machines can share the same GitHub-backed plugin updates without relying on the machine-local fallback."
+  },
+  {
     "id": "core_artifact_helpers",
     "name": "Artifact helpers for initialize, record, and supervisor status",
     "status": "complete",

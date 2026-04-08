@@ -1,7 +1,8 @@
 # Codex Autoresearch Plugin
 
 This directory contains the plugin-packaged version of `codex-autoresearch` for
-local distribution through the Codex plugin marketplace flow.
+GitHub-backed distribution through the Codex plugin marketplace flow, with a
+machine-local fallback available only when that path is unavailable.
 
 The packaged docs mirror the root bundle's subagent-first flow: the main agent orchestrates a standing pool of subagents across iterations, while the plan helper, continuation policy, and validation expectations stay aligned with the main README.
 
@@ -26,5 +27,5 @@ The auxiliary manifest files stay as valid JSON objects even when they are inten
 - Validation: `python3 scripts/check_plugin_distribution.py`
 - Gate: `python3 scripts/run_contributor_gate.py packaging`
 
-When making changes to the root skill, sync this package, run the distribution checks, and then push to `main` so GitHub-backed installs can pick up the updated packaged payload on reload.
+When making changes to the root skill, sync this package, run the distribution checks, and then push to `main` so GitHub-backed installs on multiple machines can pick up the updated packaged payload on reload.
 Only add icon, logo, or screenshot fields to `plugin.json` after the referenced asset files exist.
