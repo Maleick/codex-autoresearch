@@ -1,10 +1,10 @@
 # Changelog
 
-## v1.0.5 - 2026-04-08
+## v1.1.0 - 2026-04-08
 
+- genericized the managed hook runtime into start/stop/common/context modules, kept legacy compatibility shims during migration, and blocked archive-ready completion until git/publication state is actually clean
 - pruned stale git metadata, removed the tracked Codex handoff document from the public repo surface, and ignore future `HANDOFF*.md` notes by default
 - tightened contributor guidance and packaging checks so host-specific/private handoff details stay out of release docs
-- hardened stop-hook continuation prompts so archive-ready follow-up work still re-anchors the standing subagent pool and honors explicit hard-stop reasons
 
 ## v1.0.4 - 2026-04-02
 
