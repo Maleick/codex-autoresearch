@@ -34,6 +34,7 @@ Use this sequence whenever you want GitHub-backed plugin installs to pick up you
 6. Push to `main`.
 
 GitHub-backed installs resolve `plugins/codex-autoresearch` from `main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
+When `plugins/codex-autoresearch/.codex-plugin/plugin.json` carries a new version onto `main`, GitHub Actions also creates the matching `v*` release automatically.
 
 ## Packaging Rules
 
