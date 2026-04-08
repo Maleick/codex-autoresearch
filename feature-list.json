@@ -1,5 +1,16 @@
 [
   {
+    "id": "github_release_automation",
+    "name": "GitHub release automation for packaged plugin version bumps",
+    "status": "complete",
+    "acceptance_tests": [
+      "A workflow on main reads the packaged plugin version from plugin.json",
+      "If the matching git tag does not exist, the workflow creates a GitHub release for that version",
+      "Contributor docs mention that version bumps now produce a matching GitHub release automatically"
+    ],
+    "notes": "Keeps the GitHub release surface aligned with the packaged Codex plugin version so Git-based multi-machine installs have a clearer release trail."
+  },
+  {
     "id": "github_backed_multi_machine_distribution",
     "name": "GitHub-backed multi-machine plugin distribution guidance",
     "status": "complete",
