@@ -1,5 +1,16 @@
 [
   {
+    "id": "repo_tracked_local_plugin_autoupdate",
+    "name": "Repo-tracked local plugin autoupdate from git",
+    "status": "complete",
+    "acceptance_tests": [
+      "bootstrap_local_plugin can point a local marketplace entry at the repo's packaged plugin bundle instead of a copied fallback",
+      "Managed git hook installation writes post-checkout, post-merge, and post-rewrite sync hooks and refuses to overwrite unmanaged hooks",
+      "Install docs describe the repo-tracked local plugin mode and its git-driven refresh behavior"
+    ],
+    "notes": "Provides a single-machine install path where Codex reads the plugin from a local git checkout and the packaged bundle stays refreshed after git updates."
+  },
+  {
     "id": "github_release_automation",
     "name": "GitHub release automation for packaged plugin version bumps",
     "status": "complete",

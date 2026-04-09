@@ -35,6 +35,7 @@ Use this sequence whenever you want GitHub-backed plugin installs to pick up you
 
 GitHub-backed installs resolve `plugins/codex-autoresearch` from `main`, so plugin consumers get the packaged payload you pushed after they reload Codex.
 When `plugins/codex-autoresearch/.codex-plugin/plugin.json` carries a new version onto `main`, GitHub Actions also creates the matching `v*` release automatically.
+For maintainer testing on one machine, `python3 scripts/bootstrap_local_plugin.py --source-mode repo --install-git-hooks` installs a local-source marketplace entry that follows this checkout and re-syncs the packaged payload after git updates.
 
 ## Packaging Rules
 

@@ -31,6 +31,7 @@ Useful variants:
 
 ```bash
 python3 scripts/bootstrap_local_plugin.py --skip-sync
+python3 scripts/bootstrap_local_plugin.py --source-mode repo --install-git-hooks
 python3 scripts/bootstrap_local_plugin.py --marketplace-name team-marketplace
 python3 scripts/bootstrap_local_plugin.py --marketplace ~/.agents/plugins/marketplace.json --install-root ~/plugins
 ```
@@ -39,5 +40,6 @@ Notes:
 
 - The repository marketplace entry stays GitHub-backed. The fallback bootstrap intentionally rewrites the machine-local marketplace entry to a `local` source because some Codex builds only accept local sources there.
 - The script does not rewrite `~/.codex/config.toml`; keep the enabled-plugin entry explicit.
+- `--source-mode repo --install-git-hooks` is the single-machine variant when you want the local marketplace entry to follow this git checkout directly instead of copying a fallback snapshot.
 - Reload Codex after updating the local install or marketplace manifest.
 - This workflow is machine-local state. Do not commit those generated local files back into the repository.

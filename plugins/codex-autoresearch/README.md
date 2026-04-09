@@ -28,4 +28,5 @@ The auxiliary manifest files stay as valid JSON objects even when they are inten
 - Gate: `python3 scripts/run_contributor_gate.py packaging`
 
 When making changes to the root skill, sync this package, run the distribution checks, and then push to `main` so GitHub-backed installs on multiple machines can pick up the updated packaged payload on reload.
+For a single local checkout that should follow `git pull` directly, use `python3 scripts/bootstrap_local_plugin.py --source-mode repo --install-git-hooks` so the local marketplace entry points at this repo bundle and the managed git hooks keep that bundle re-synced after checkout/merge/rewrite operations.
 Only add icon, logo, or screenshot fields to `plugin.json` after the referenced asset files exist.
