@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,10 +9,14 @@ import pytest
 from scripts.bootstrap_local_plugin import (
     DEFAULT_MARKETPLACE_DISPLAY_NAME,
     DEFAULT_MARKETPLACE_NAME,
+    GIT_SYNC_HOOK_NAMES,
+    MANAGED_HOOK_SENTINEL,
     PLUGIN_NAME,
+    SOURCE_MODE_REPO,
     BootstrapError,
     bootstrap_local_plugin,
     build_local_plugin_entry,
+    install_git_sync_hooks,
     load_repo_marketplace_entry,
     merge_marketplace_entry,
 )
@@ -92,6 +97,16 @@ def _make_repo(repo_root: Path) -> Path:
     return plugin_root
 
 
+def _git_init(repo_root: Path) -> None:
+    subprocess.run(
+        ["git", "init"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_build_local_plugin_entry_rewrites_repo_source_to_local_path(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _make_repo(repo_root)
@@ -99,7 +114,7 @@ def test_build_local_plugin_entry_rewrites_repo_source_to_local_path(tmp_path: P
     entry = build_local_plugin_entry(
         load_repo_marketplace_entry(repo_root),
         home_root=tmp_path / "home",
-        install_root=tmp_path / "home" / "plugins",
+        plugin_root=tmp_path / "home" / "plugins" / PLUGIN_NAME,
     )
 
     assert entry["source"] == {
@@ -191,7 +206,7 @@ def test_build_local_plugin_entry_rejects_install_outside_home(tmp_path: Path) -
         build_local_plugin_entry(
             load_repo_marketplace_entry(repo_root),
             home_root=tmp_path / "home",
-            install_root=tmp_path / "elsewhere",
+            plugin_root=tmp_path / "elsewhere" / PLUGIN_NAME,
         )
 
 
@@ -223,8 +238,64 @@ def test_merge_marketplace_entry_rejects_non_local_unrelated_plugins(tmp_path: P
             build_local_plugin_entry(
                 load_repo_marketplace_entry(repo_root),
                 home_root=home_root,
-                install_root=install_root,
+                plugin_root=install_root / PLUGIN_NAME,
             ),
             marketplace_name=DEFAULT_MARKETPLACE_NAME,
             marketplace_display_name=DEFAULT_MARKETPLACE_DISPLAY_NAME,
         )
+
+
+def test_bootstrap_local_plugin_repo_mode_tracks_repo_bundle(tmp_path: Path) -> None:
+    home_root = tmp_path / "home"
+    repo_root = home_root / "Projects" / "codex-autoresearch"
+    plugin_root = _make_repo(repo_root)
+    install_root = home_root / "plugins"
+    marketplace_path = home_root / ".agents" / "plugins" / "marketplace.json"
+
+    result = bootstrap_local_plugin(
+        repo_root,
+        install_root=install_root,
+        marketplace_path=marketplace_path,
+        marketplace_name=DEFAULT_MARKETPLACE_NAME,
+        marketplace_display_name=DEFAULT_MARKETPLACE_DISPLAY_NAME,
+        sync_source=False,
+        source_mode=SOURCE_MODE_REPO,
+    )
+
+    payload = _load_json(marketplace_path)
+    assert payload["plugins"][0]["source"] == {
+        "source": "local",
+        "path": "./Projects/codex-autoresearch/plugins/codex-autoresearch",
+    }
+    assert result["install_target"] == str(plugin_root)
+    assert result["source_mode"] == SOURCE_MODE_REPO
+    assert result["source_action"] == "tracked"
+
+
+def test_install_git_sync_hooks_creates_managed_hooks(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _git_init(repo_root)
+
+    result = install_git_sync_hooks(repo_root)
+    hooks_root = Path(result["hooks_root"])
+    runner_path = hooks_root / "codex-autoresearch-sync"
+
+    assert runner_path.exists()
+    assert "sync_plugin_payload.py" in runner_path.read_text(encoding="utf-8")
+    for hook_name in GIT_SYNC_HOOK_NAMES:
+        hook_path = hooks_root / hook_name
+        assert hook_path.exists()
+        assert MANAGED_HOOK_SENTINEL in hook_path.read_text(encoding="utf-8")
+
+
+def test_install_git_sync_hooks_refuses_to_overwrite_unmanaged_hook(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _git_init(repo_root)
+    hooks_root = repo_root / ".git" / "hooks"
+    hook_path = hooks_root / "post-merge"
+    hook_path.write_text("#!/bin/sh\necho unmanaged\n", encoding="utf-8")
+
+    with pytest.raises(BootstrapError, match="unmanaged git hook"):
+        install_git_sync_hooks(repo_root)

@@ -7,6 +7,7 @@
 Use the install mode that matches how you want updates to flow:
 
 - Repo-managed skill: best for live development on one machine.
+- Repo-tracked local plugin: best when you want the plugin install to follow a local git checkout on one machine.
 - GitHub-backed plugin: best when you want the same plugin update path on multiple machines, including macOS and Windows.
 - Local fallback plugin: only for machines that cannot install or refresh the GitHub-backed plugin.
 
@@ -25,6 +26,22 @@ For live development, prefer a symlink so edits in this repo are reflected immed
 git clone https://github.com/Maleick/codex-autoresearch.git
 ln -s "$(pwd)/codex-autoresearch" your-project/.agents/skills/codex-autoresearch
 ```
+
+## Repo-Tracked Local Plugin
+
+If you want the packaged plugin install to follow this checkout directly, bootstrap a local marketplace entry that points at the repo bundle instead of copying a fallback snapshot:
+
+```bash
+python3 scripts/bootstrap_local_plugin.py --source-mode repo --install-git-hooks
+```
+
+This mode:
+
+- syncs `plugins/codex-autoresearch` from the repo root first
+- points the local marketplace entry at this checkout's `plugins/codex-autoresearch`
+- installs managed `post-checkout`, `post-merge`, and `post-rewrite` git hooks that re-run `scripts/sync_plugin_payload.py`
+
+Use this mode when `git pull`, branch switches, or rebases should refresh the packaged plugin payload before the next Codex reload. The hook installer refuses to overwrite unmanaged hooks, so existing custom git hooks stay explicit.
 
 ## Verify The Skill
 

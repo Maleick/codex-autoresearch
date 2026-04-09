@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.2 - 2026-04-08
+
+- added a repo-tracked local plugin install mode so a machine-local marketplace entry can point at this checkout instead of a copied fallback bundle
+- added managed `post-checkout`, `post-merge`, and `post-rewrite` git hooks that re-sync the packaged plugin payload after git-driven updates for that repo-tracked local mode
+
 ## v1.1.1 - 2026-04-08
 
 - documented GitHub-backed plugin setup as the preferred multi-machine install path for Codex on macOS and Windows

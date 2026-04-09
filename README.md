@@ -1,5 +1,5 @@
 # Codex Autoresearch [![GitHub Release](https://img.shields.io/github/v/release/Maleick/codex-autoresearch?style=flat-square&label=release)](https://github.com/Maleick/codex-autoresearch/releases) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE) [![Language](https://img.shields.io/badge/language-Python-brightgreen?style=flat-square)](plugins/codex-autoresearch) [![Last Commit](https://img.shields.io/github/last-commit/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/commits/main) [![GitHub Stars](https://img.shields.io/github/stars/Maleick/codex-autoresearch?style=flat-square)](https://github.com/Maleick/codex-autoresearch/stargazers) [![Repo Size](https://img.shields.io/github/repo-size/Maleick/codex-autoresearch?style=flat-square)](.) [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](CHANGELOG.md) [![Claude Code](https://img.shields.io/badge/compatible-Codex%20Code-blueviolet?style=flat-square)](https://openai.com/product/codex/) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square)](.) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
-> **v1.1.1** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Subagent-first, metric-driven iteration for Codex.
+> **v1.1.2** - [Issues](https://github.com/Maleick/codex-autoresearch/issues) Subagent-first, metric-driven iteration for Codex.
 
 Subagent-first, metric-driven iteration for Codex.
 
@@ -75,7 +75,7 @@ For unattended runs, the bundle can also produce:
 
 ## Quick Start
 
-Install the skill in a repo-managed location for live development, or install the packaged plugin from GitHub if you want one update path shared across multiple Codex machines. For example:
+Install the skill in a repo-managed location for live development, use the repo-tracked local plugin mode if you want a plugin install that follows this checkout on one machine, or install the packaged plugin from GitHub if you want one update path shared across multiple Codex machines. For example:
 
 ```text
 $codex-autoresearch
@@ -169,6 +169,7 @@ To update the GitHub-backed plugin safely:
 
 For shared Mac and Windows installs, prefer the GitHub-backed marketplace entry over the machine-local fallback so both machines resolve the same packaged payload from `Maleick/codex-autoresearch@main`.
 To refresh the installed plugin from GitHub after pushing a new release, re-open or reload Codex so marketplace entries are re-read.
+For single-machine development where the installed plugin should follow this checkout directly, run `python3 scripts/bootstrap_local_plugin.py --source-mode repo --install-git-hooks`. That rewrites the local marketplace entry to a `local` source pointed at this repo's packaged plugin bundle instead of a copied fallback. The managed git hooks re-run `scripts/sync_plugin_payload.py` after `post-checkout`, `post-merge`, and `post-rewrite`, so a later `git pull` or branch switch refreshes the packaged payload before the next Codex reload. The installer refuses to overwrite unmanaged hooks.
 If a specific machine cannot install the GitHub-backed plugin directly, run `python3 scripts/bootstrap_local_plugin.py` to populate the supported machine-local fallback under `~/plugins`; see [docs/LOCAL-FALLBACK-BOOTSTRAP.md](docs/LOCAL-FALLBACK-BOOTSTRAP.md).
 Contributor-facing packaging rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 Pushes to `main` that change the packaged plugin version now also create a matching GitHub release tag automatically, so the Git-based release surface stays aligned with `plugins/codex-autoresearch/.codex-plugin/plugin.json`.

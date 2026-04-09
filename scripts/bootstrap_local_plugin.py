@@ -6,6 +6,8 @@ import copy
 import json
 import os
 import shutil
+import stat
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,10 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution path
 PLUGIN_NAME = "codex-autoresearch"
 DEFAULT_MARKETPLACE_NAME = "local-plugins"
 DEFAULT_MARKETPLACE_DISPLAY_NAME = "Local Plugins"
+SOURCE_MODE_COPY = "copy"
+SOURCE_MODE_REPO = "repo"
+MANAGED_HOOK_SENTINEL = "# codex-autoresearch managed hook"
+GIT_SYNC_HOOK_NAMES = ("post-checkout", "post-merge", "post-rewrite")
 
 
 class BootstrapError(RuntimeError):
@@ -84,11 +90,12 @@ def home_root_for_marketplace(marketplace_path: Path) -> Path:
         ) from exc
 
 
-def local_source_path(*, home_root: Path, install_root: Path) -> str:
-    relative = os.path.relpath((install_root / PLUGIN_NAME).resolve(), home_root.resolve())
+def local_source_path(*, home_root: Path, plugin_root: Path) -> str:
+    relative = os.path.relpath(plugin_root.resolve(), home_root.resolve())
     if relative == "." or relative.startswith(".."):
         raise BootstrapError(
-            f"Install root must stay inside the marketplace home root: install_root={install_root}, home_root={home_root}"
+            "Plugin source must stay inside the marketplace home root: "
+            f"plugin_root={plugin_root}, home_root={home_root}"
         )
     return f"./{relative.replace(os.sep, '/')}"
 
@@ -97,7 +104,7 @@ def build_local_plugin_entry(
     repo_entry: dict[str, Any],
     *,
     home_root: Path,
-    install_root: Path,
+    plugin_root: Path,
 ) -> dict[str, Any]:
     entry = copy.deepcopy(repo_entry)
     if entry.get("name") != PLUGIN_NAME:
@@ -111,7 +118,7 @@ def build_local_plugin_entry(
         )
     entry["source"] = {
         "source": "local",
-        "path": local_source_path(home_root=home_root, install_root=install_root),
+        "path": local_source_path(home_root=home_root, plugin_root=plugin_root),
     }
     return entry
 
@@ -229,6 +236,105 @@ def copy_installed_plugin(repo_root: Path, install_root: Path) -> Path:
     return target_path
 
 
+def repo_source_plugin(repo_root: Path) -> Path:
+    plugin_root = plugin_bundle_root(repo_root)
+    if not plugin_root.is_dir():
+        raise BootstrapError(f"Missing packaged plugin bundle: {plugin_root}")
+    return plugin_root.resolve()
+
+
+def run_git(repo_root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise BootstrapError(
+            f"Git command failed ({' '.join(args)}): {stderr or 'unknown error'}"
+        )
+    return result.stdout.strip()
+
+
+def git_hooks_root(repo_root: Path) -> Path:
+    raw_path = run_git(repo_root, "rev-parse", "--git-path", "hooks")
+    hooks_path = Path(raw_path)
+    if not hooks_path.is_absolute():
+        hooks_path = (repo_root / hooks_path).resolve()
+    return hooks_path
+
+
+def write_executable_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    current_mode = path.stat().st_mode
+    path.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def managed_sync_runner_text() -> str:
+    return """#!/bin/sh
+# codex-autoresearch managed hook runner
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$REPO_ROOT" || exit 0
+
+if command -v python3 >/dev/null 2>&1; then
+  python3 scripts/sync_plugin_payload.py >/dev/null 2>&1 || exit 0
+  exit 0
+fi
+if command -v python >/dev/null 2>&1; then
+  python scripts/sync_plugin_payload.py >/dev/null 2>&1 || exit 0
+  exit 0
+fi
+if command -v py >/dev/null 2>&1; then
+  py -3 scripts/sync_plugin_payload.py >/dev/null 2>&1 || exit 0
+  exit 0
+fi
+exit 0
+"""
+
+
+def managed_hook_text(hook_name: str) -> str:
+    return f"""#!/bin/sh
+{MANAGED_HOOK_SENTINEL}: {hook_name}
+HOOK_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+"$HOOK_DIR/codex-autoresearch-sync" "$@" || exit 0
+"""
+
+
+def ensure_managed_hook(path: Path, content: str) -> str:
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+        if MANAGED_HOOK_SENTINEL not in existing:
+            raise BootstrapError(
+                f"Refusing to overwrite existing unmanaged git hook: {path}"
+            )
+        action = "updated"
+    else:
+        action = "created"
+    write_executable_text(path, content)
+    return action
+
+
+def install_git_sync_hooks(repo_root: Path) -> dict[str, object]:
+    hooks_root = git_hooks_root(repo_root)
+    runner_path = hooks_root / "codex-autoresearch-sync"
+    runner_action = ensure_managed_hook(runner_path, managed_sync_runner_text())
+    hook_actions: dict[str, str] = {}
+    for hook_name in GIT_SYNC_HOOK_NAMES:
+        hook_actions[hook_name] = ensure_managed_hook(
+            hooks_root / hook_name,
+            managed_hook_text(hook_name),
+        )
+    return {
+        "hooks_root": str(hooks_root),
+        "runner": runner_action,
+        "hooks": hook_actions,
+    }
+
+
 def bootstrap_local_plugin(
     repo_root: Path,
     *,
@@ -237,20 +343,32 @@ def bootstrap_local_plugin(
     marketplace_name: str,
     marketplace_display_name: str,
     sync_source: bool = True,
+    source_mode: str = SOURCE_MODE_COPY,
+    install_git_hooks: bool = False,
 ) -> dict[str, str]:
     repo_root = repo_root.resolve()
     install_root = install_root.expanduser().resolve()
     marketplace_path = marketplace_path.expanduser().resolve()
 
+    if source_mode not in {SOURCE_MODE_COPY, SOURCE_MODE_REPO}:
+        raise BootstrapError(f"Unsupported source mode: {source_mode!r}")
+    if install_git_hooks and source_mode != SOURCE_MODE_REPO:
+        raise BootstrapError("Git auto-sync hooks require --source-mode repo")
+
     if sync_source:
         sync_payload(repo_root)
 
-    install_target = copy_installed_plugin(repo_root, install_root)
+    if source_mode == SOURCE_MODE_COPY:
+        source_root = copy_installed_plugin(repo_root, install_root)
+        source_action = "copied"
+    else:
+        source_root = repo_source_plugin(repo_root)
+        source_action = "tracked"
     home_root = home_root_for_marketplace(marketplace_path)
     plugin_entry = build_local_plugin_entry(
         load_repo_marketplace_entry(repo_root),
         home_root=home_root,
-        install_root=install_root,
+        plugin_root=source_root,
     )
     marketplace_result = merge_marketplace_entry(
         marketplace_path,
@@ -259,22 +377,28 @@ def bootstrap_local_plugin(
         marketplace_display_name=marketplace_display_name,
     )
     effective_marketplace_name = marketplace_result["marketplace_name"]
-    return {
-        "install_target": str(install_target),
+    payload = {
+        "install_target": str(source_root),
         "marketplace_action": marketplace_result["action"],
         "marketplace_name": effective_marketplace_name,
         "marketplace_path": marketplace_result["marketplace_path"],
         "plugin_reference": f"{PLUGIN_NAME}@{effective_marketplace_name}",
         "source_path": plugin_entry["source"]["path"],
         "source_sync": "synced" if sync_source else "skipped",
+        "source_mode": source_mode,
+        "source_action": source_action,
     }
+    if install_git_hooks:
+        hook_payload = install_git_sync_hooks(repo_root)
+        payload["hooks_root"] = str(hook_payload["hooks_root"])
+    return payload
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Install the packaged codex-autoresearch plugin into a machine-local "
-            "plugin directory and merge a local-source marketplace fallback entry."
+            "marketplace entry, either by copying the bundle or by tracking the repo bundle directly."
         )
     )
     parser.add_argument(
@@ -313,6 +437,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip syncing the packaged plugin payload from the repo root first.",
     )
+    parser.add_argument(
+        "--source-mode",
+        choices=(SOURCE_MODE_COPY, SOURCE_MODE_REPO),
+        default=SOURCE_MODE_COPY,
+        help=(
+            "Choose whether the local marketplace entry points at a copied bundle "
+            "or the repo's packaged plugin bundle directly."
+        ),
+    )
+    parser.add_argument(
+        "--install-git-hooks",
+        action="store_true",
+        help=(
+            "Install managed post-checkout/post-merge/post-rewrite hooks that "
+            "re-sync the packaged plugin payload after git updates. Requires --source-mode repo."
+        ),
+    )
     return parser
 
 
@@ -336,14 +477,21 @@ def main() -> int:
         marketplace_name=args.marketplace_name,
         marketplace_display_name=args.marketplace_display_name,
         sync_source=not args.skip_sync,
+        source_mode=args.source_mode,
+        install_git_hooks=args.install_git_hooks,
     )
     print(f"Packaged plugin payload {payload['source_sync']} from repo sources.")
-    print(f"Installed plugin bundle to {payload['install_target']}")
+    if payload["source_mode"] == SOURCE_MODE_COPY:
+        print(f"Installed plugin bundle to {payload['install_target']}")
+    else:
+        print(f"Tracking repo plugin bundle at {payload['install_target']}")
     print(
         f"{payload['marketplace_action'].capitalize()} marketplace entry in "
         f"{payload['marketplace_path']}"
     )
     print(f"Local marketplace source path: {payload['source_path']}")
+    if args.install_git_hooks:
+        print(f"Installed managed git sync hooks under {payload['hooks_root']}")
     print(f"Enabled plugin reference: {payload['plugin_reference']}")
     print("Reload Codex after updating enabled plugins if it is already running.")
     return 0
